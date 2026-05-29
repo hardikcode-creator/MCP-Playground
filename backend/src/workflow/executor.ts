@@ -84,10 +84,6 @@ export class WorkflowExecutor {
     // single source of truth for ordering. Idempotent: a no-op if the workflow
     // came from `loadWorkflowFromFile` (which already normalized).
     const workflow = normalizeWorkflow(input);
-
-    // Cycle detection runs on the normalized graph, so it catches cycles
-    // formed by data refs AND/OR by explicit dependsOn — they're now the
-    // same edge set.
     topoSort(workflow);
 
     const { incoming, outgoing } = buildAdjacency(workflow);
