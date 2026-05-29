@@ -1,12 +1,5 @@
 import type { ValueRef } from '../types/workflow.js';
 
-/**
- * Type guard: does this value match the ValueRef shape?
- *
- * A ValueRef is an object with a single significant property `$ref` that
- * itself contains `nodeId` (string) and (optionally) `path` (string).
- * Any other shape is treated as a literal at execution time.
- */
 export function isValueRef(value: unknown): value is ValueRef {
   if (typeof value !== 'object' || value === null) return false;
   if (!('$ref' in value)) return false;
@@ -16,10 +9,6 @@ export function isValueRef(value: unknown): value is ValueRef {
   return typeof nodeId === 'string' && nodeId.length > 0;
 }
 
-/**
- * Walk an args tree (or any JSON value) and invoke `visitor` for every
- * ValueRef encountered. Used for dep discovery and ref validation.
- */
 export function walkRefs(
   value: unknown,
   visitor: (ref: ValueRef) => void,
@@ -40,14 +29,6 @@ export function walkRefs(
   }
 }
 
-/**
- * Walk an args tree and produce a new tree where every ValueRef has been
- * replaced by the JSONPath-resolved value from `done` (the map of
- * nodeId → that node's tool result).
- *
- * Throws RefResolutionError if a ref points to a missing node or if the
- * JSONPath cannot be resolved against the source value.
- */
 export function resolveArgs(
   args: unknown,
   done: Map<string, unknown>,

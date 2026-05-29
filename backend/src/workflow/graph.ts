@@ -14,15 +14,32 @@ export type AdjacencyResult = {
 };
 
 /**
- * Returns the set of upstream node IDs this node depends on. Derived purely
- * from $refs inside the node's args — there is no separate "edges" array in
- * the workflow JSON. This makes the visual graph and the executable graph
- * trivially consistent.
+ * Scan a node's args for $refs and return the set of source node IDs.
+ * This is used at LOAD TIME by `normalizeWorkflow` to derive ordering edges
+ * from data refs. The executor itself never calls this — it reads only
+ * from `dependsOn` (which is canonical after normalization).
+ */
+export function refSourcesOf(node: WorkflowNode): Set<string> {
+  const sources = new Set<string>();
+  walkRefs(node.args, (ref) => sources.add(ref.$ref.nodeId));
+  return sources;
+}
+
+/**
+ * The dependency contract for a NORMALIZED workflow: just read `dependsOn`.
+ *
+ * This is the runtime spine of the engine. Every consumer (cycle detection,
+ * topo sort, adjacency, the executor's ready/inflight/done loop) calls this
+ * one function. By making it trivial — and concentrating the "derive from
+ * refs" logic into `normalizeWorkflow` — the rest of the codebase stays small
+ * and obviously correct.
+ *
+ * Calling this on a non-normalized workflow is safe but may underreport deps
+ * (specifically, ref-based deps that haven't been unioned into dependsOn).
+ * Always go through `normalizeWorkflow` first.
  */
 export function dependenciesOf(node: WorkflowNode): Set<string> {
-  const deps = new Set<string>();
-  walkRefs(node.args, (ref) => deps.add(ref.$ref.nodeId));
-  return deps;
+  return new Set(node.dependsOn);
 }
 
 export function buildAdjacency(workflow: Workflow): AdjacencyResult {
@@ -44,10 +61,14 @@ export function buildAdjacency(workflow: Workflow): AdjacencyResult {
 }
 
 /**
- * Validate that:
- *   - every $ref.nodeId references a node that actually exists
- *   - no node references itself (trivial 1-cycle)
- * Returns a list of human-readable error strings (empty if clean).
+ * Validate that every $ref in `args` points to an existing node and never to
+ * itself. Reports $ref-specific errors so the user gets a clear message
+ * (e.g. "Node X has $ref to unknown node Y", not the more generic
+ * "dependsOn includes Y").
+ *
+ * This runs on the ORIGINAL (pre-normalized) workflow because normalization
+ * silently dedupes; running this first surfaces typos in $refs before they
+ * get smeared into dependsOn.
  */
 export function validateRefs(workflow: Workflow): string[] {
   const errors: string[] = [];
@@ -63,6 +84,83 @@ export function validateRefs(workflow: Workflow): string[] {
     });
   }
   return errors;
+}
+
+/**
+ * Validate the user-written `dependsOn` entries: every id must reference an
+ * existing node, no node may list itself. Mirrors validateRefs but for
+ * explicit ordering edges.
+ */
+export function validateDependsOn(workflow: Workflow): string[] {
+  const errors: string[] = [];
+  const known = new Set(workflow.nodes.map((n) => n.id));
+  for (const node of workflow.nodes) {
+    for (const dep of node.dependsOn) {
+      if (!known.has(dep)) {
+        errors.push(
+          `Node "${node.id}" has dependsOn entry "${dep}" which is not a node in this workflow`,
+        );
+      } else if (dep === node.id) {
+        errors.push(
+          `Node "${node.id}" lists itself in dependsOn (self-cycle)`,
+        );
+      }
+    }
+  }
+  return errors;
+}
+
+/**
+ * Returns a new Workflow where each node's `dependsOn` is the union of:
+ *   1. the user's explicit `dependsOn` entries (control edges)
+ *   2. every node referenced by a $ref anywhere in this node's args (data edges)
+ *
+ * Throws `WorkflowNormalizationError` if any node ends up depending on itself
+ * (via either a self-`$ref` or a self-entry in `dependsOn`). We do NOT silently
+ * strip self-references: silent stripping would hide real bugs. The validators
+ * (`validateRefs` / `validateDependsOn`) catch this earlier when called, but
+ * normalize is defensive and also throws if invoked directly (e.g. by the
+ * loader, or by a programmatic caller that bypassed the validators).
+ *
+ * After this transform, the rest of the engine doesn't need to know that
+ * refs exist at all for the purposes of ordering — `dependsOn` IS the graph.
+ * Refs still drive value substitution at runtime (resolveArgs).
+ *
+ * Idempotent on well-formed input: normalizing an already-normalized workflow
+ * is a no-op.
+ */
+export function normalizeWorkflow(workflow: Workflow): Workflow {
+  const selfCycles: string[] = [];
+  const nodes = workflow.nodes.map((node) => {
+    const refSources = refSourcesOf(node);
+    const refSelf = refSources.has(node.id);
+    const dependsSelf = node.dependsOn.includes(node.id);
+    if (refSelf || dependsSelf) {
+      const via: string[] = [];
+      if (refSelf) via.push('$ref');
+      if (dependsSelf) via.push('dependsOn');
+      selfCycles.push(
+        `Node "${node.id}" depends on itself (via ${via.join(' and ')})`,
+      );
+    }
+    const merged = new Set<string>(node.dependsOn);
+    for (const src of refSources) merged.add(src);
+    return { ...node, dependsOn: [...merged] };
+  });
+  if (selfCycles.length > 0) {
+    throw new WorkflowNormalizationError(selfCycles);
+  }
+  return { ...workflow, nodes };
+}
+
+export class WorkflowNormalizationError extends Error {
+  constructor(public readonly issues: string[]) {
+    const lines = issues.map((i) => `  - ${i}`);
+    super(
+      `Workflow normalization failed (self-cycles found):\n${lines.join('\n')}`,
+    );
+    this.name = 'WorkflowNormalizationError';
+  }
 }
 
 /**

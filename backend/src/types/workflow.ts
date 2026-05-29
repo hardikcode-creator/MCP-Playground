@@ -1,18 +1,9 @@
 import { z } from 'zod';
 
-const NODE_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
-
 /**
- * A ValueRef is the runtime contract for "wiring" between nodes.
- * Anywhere a literal JSON value could appear inside a node's args, a ValueRef
- * may appear instead. At execution time the executor replaces every ValueRef
- * with the JSONPath lookup `done.get(ref.$ref.nodeId)[ref.$ref.path]`.
- *
- * Example:
- *   { "$ref": { "nodeId": "list_clusters", "path": "$.clusters[0].uuid" } }
- *
- * `path` defaults to "$" (the whole upstream result).
+ * Workflow and node validation types
  */
+const NODE_ID_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*$/;
 export const ValueRefSchema = z.object({
   $ref: z.object({
     nodeId: z.string().min(1, 'nodeId is required'),
@@ -29,11 +20,6 @@ const ArgPrimitiveSchema = z.union([
   z.null(),
 ]);
 
-/**
- * Any JSON value that can sit inside a node's args tree.
- * Literals and ValueRefs are interchangeable at any depth.
- * The executor walks this tree and only substitutes shapes that match ValueRef.
- */
 export const ArgValueSchema: z.ZodType<unknown> = z.lazy(() =>
   z.union([
     ArgPrimitiveSchema,
@@ -53,6 +39,7 @@ export const WorkflowNodeSchema = z.object({
     ),
   tool: z.string().min(1, 'Tool qualifiedName is required'),
   args: z.record(ArgValueSchema).default({}),
+  dependsOn: z.array(z.string()).default([]),
 });
 
 export type WorkflowNode = z.infer<typeof WorkflowNodeSchema>;
@@ -81,24 +68,6 @@ export const WorkflowSchema = z
   });
 
 export type Workflow = z.infer<typeof WorkflowSchema>;
-
-export class WorkflowValidationError extends Error {
-  constructor(public readonly issues: z.ZodIssue[]) {
-    const lines = issues.map(
-      (i) => `  - ${i.path.join('.') || '(root)'}: ${i.message}`,
-    );
-    super(`Workflow validation failed:\n${lines.join('\n')}`);
-    this.name = 'WorkflowValidationError';
-  }
-}
-
-export function parseWorkflow(value: unknown): Workflow {
-  const result = WorkflowSchema.safeParse(value);
-  if (!result.success) {
-    throw new WorkflowValidationError(result.error.issues);
-  }
-  return result.data;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Runtime state types (filled in by the executor; reported back to callers)

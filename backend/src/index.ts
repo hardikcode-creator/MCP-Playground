@@ -1,10 +1,9 @@
 import { ConfigValidationError, loadConfigFromFile } from './config.js';
 import { ClientManager } from './mcp/client-manager.js';
 import type { EngineEvent } from './types/workflow.js';
-import { WorkflowValidationError } from './types/workflow.js';
 import { CycleError } from './workflow/graph.js';
 import { WorkflowExecutor } from './workflow/executor.js';
-import { loadWorkflowFromFile } from './workflow/loader.js';
+import { loadWorkflowFromFile, WorkflowValidationError } from './workflow/loader.js';
 import type { StartResult } from './mcp/client-manager.js';
 
 async function main(): Promise<void> {
@@ -175,7 +174,7 @@ async function runWorkflowCmd(
   }
 
   console.error(
-    `\n[run-workflow] ${workflow.id}${
+    `\n\n\n[run-workflow] ${workflow.id}${
       workflow.name ? ` — ${workflow.name}` : ''
     } (${workflow.nodes.length} nodes)\n`,
   );
