@@ -203,6 +203,7 @@ export class ClientManager {
   async callTool(
     qualifiedName: string,
     args: Record<string, unknown>,
+    options: { signal?: AbortSignal } = {},
   ): Promise<unknown> {
     const owner = this.findToolOwner(qualifiedName);
     if (!owner) {
@@ -217,10 +218,15 @@ export class ClientManager {
         `Server "${owner.serverName}" owns "${qualifiedName}" but is not connected`,
       );
     }
-    const result = await managed.client.callTool({
-      name: owner.baseName,
-      arguments: args,
-    });
+    // Pre-check: if already aborted, fail fast without dispatching.
+    if (options.signal?.aborted) {
+      throw new Error(`Tool "${qualifiedName}" was cancelled before dispatch`);
+    }
+    const result = await managed.client.callTool(
+      { name: owner.baseName, arguments: args },
+      undefined,
+      options.signal ? { signal: options.signal } : undefined,
+    );
     if (result.isError === true) {
       const message = extractErrorMessage(result);
       throw new Error(`Tool "${qualifiedName}" reported error: ${message}`);

@@ -40,6 +40,7 @@ export const WorkflowNodeSchema = z.object({
   tool: z.string().min(1, 'Tool qualifiedName is required'),
   args: z.record(ArgValueSchema).default({}),
   dependsOn: z.array(z.string()).default([]),
+  breakpoint: z.boolean().default(false),
 });
 
 export type WorkflowNode = z.infer<typeof WorkflowNodeSchema>;
@@ -73,21 +74,43 @@ export type Workflow = z.infer<typeof WorkflowSchema>;
 // Runtime state types (filled in by the executor; reported back to callers)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Node-level statuses. NOTE there is no node-level 'cancelled' status —
+ * cancellation is a workflow-level concept (see WorkflowStatus). When a
+ * workflow is cancelled mid-run, individual nodes stay in whatever
+ * non-terminal state they were in: 'pending' if we never launched them,
+ * 'running' if the tool call was aborted in flight, 'paused' if we
+ * abandoned them at a breakpoint. Combined with workflow.status ===
+ * 'cancelled', a UI can show "this one was caught mid-execution".
+ */
 export type NodeStatus =
   | 'pending'   // declared, not yet ready to run (waiting on deps)
   | 'ready'     // all deps complete; sitting in the ready queue
   | 'running'   // currently executing
+  | 'paused'    // at a breakpoint, awaiting user action via PauseHandler
   | 'completed' // succeeded, result captured
   | 'failed'    // tool threw, or ref resolution failed
-  | 'skipped';  // an upstream dep failed; this node never ran
+  | 'skipped';  // an upstream dep failed, OR user skipped at a breakpoint
 
 export type NodeRunState = {
   nodeId: string;
   tool: string;
   status: NodeStatus;
-  /** Args as authored, BEFORE $ref substitution. */
+  /**
+   * Raw args BEFORE $ref substitution.
+   *   - Starts as `node.args` (the form authored in the workflow JSON).
+   *   - Overwritten to the user-supplied value if a `continue-with-args`
+   *     action was taken at this node's breakpoint. In that case it
+   *     reflects what the user typed (potentially with new $refs), not
+   *     the originally-authored args.
+   */
   typedArgs?: Record<string, unknown>;
-  /** Args as actually sent to the tool, AFTER $ref substitution. */
+  /**
+   * Args as actually sent to the tool, AFTER $ref substitution.
+   * Always derived from `typedArgs` by running it through resolveArgs;
+   * if the user edited args at a breakpoint, this is the re-resolved
+   * form of their edit.
+   */
   resolvedArgs?: Record<string, unknown>;
   result?: unknown;
   error?: string;
@@ -96,15 +119,37 @@ export type NodeRunState = {
   durationMs?: number;
 };
 
+export type WorkflowStatus = 'completed' | 'failed' | 'cancelled';
+
 export type WorkflowRunResult = {
   workflowId: string;
   runId: string;
-  status: 'completed' | 'failed';
+  status: WorkflowStatus;
   startedAt: number;
   finishedAt: number;
   durationMs: number;
   steps: NodeRunState[];
 };
+
+export type BreakpointContext = {
+  nodeId: string;
+  tool: string;
+  source: 'authored' | 'runtime';
+  args: Record<string, unknown>;
+};
+
+/**
+ * The action returned by the pause handler tells the executor how to proceed:
+ *   continue              — keep going with the current args unchanged
+ *   continue-with-args    — call the tool with these args instead
+ *   skip                  — mark this node as skipped; dependents are transitively skipped
+ *   fail                  — mark this node as failed with the given error; dependents skipped
+ */
+export type PauseAction =
+  | { type: 'continue' }
+  | { type: 'continue-with-args'; args: Record<string, unknown> }
+  | { type: 'skip' }
+  | { type: 'fail'; error: string };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Events emitted by the executor.
@@ -122,6 +167,25 @@ export type EngineEvent =
       resolvedArgs: Record<string, unknown>;
     }
   | {
+      type: 'node.paused';
+      nodeId: string;
+      source: BreakpointContext['source'];
+      args: Record<string, unknown>;
+    }
+  | {
+      type: 'node.resumed';
+      nodeId: string;
+      action: PauseAction['type'];
+    }
+  | {
+      type: 'breakpoint.added';
+      nodeId: string;
+    }
+  | {
+      type: 'breakpoint.cleared';
+      nodeId: string;
+    }
+  | {
       type: 'node.completed';
       nodeId: string;
       result: unknown;
@@ -137,6 +201,6 @@ export type EngineEvent =
   | {
       type: 'workflow.completed';
       runId: string;
-      status: 'completed' | 'failed';
+      status: WorkflowStatus;
       durationMs: number;
     };

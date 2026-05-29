@@ -1,10 +1,22 @@
 import { ConfigValidationError, loadConfigFromFile } from './config.js';
+import { CliRunController } from './cli/run-controller.js';
 import { ClientManager } from './mcp/client-manager.js';
 import type { EngineEvent } from './types/workflow.js';
 import { CycleError } from './workflow/graph.js';
 import { WorkflowExecutor } from './workflow/executor.js';
 import { loadWorkflowFromFile, WorkflowValidationError } from './workflow/loader.js';
 import type { StartResult } from './mcp/client-manager.js';
+
+/**
+ * If a workflow is mid-run when SIGINT arrives, we want Ctrl+C to CANCEL the
+ * workflow (let it wind down through the executor's signal path) rather than
+ * yank the manager out from under it. The signal handler set up in main()
+ * dispatches based on whether this is currently non-null.
+ *
+ * Second SIGINT during cancellation falls through to manager.shutdown() and
+ * a hard exit, so a stuck workflow can still be killed.
+ */
+let currentRunAbort: AbortController | null = null;
 
 async function main(): Promise<void> {
   const [
@@ -44,7 +56,20 @@ async function main(): Promise<void> {
     await manager.shutdown();
     process.exit(0);
   };
-  process.on('SIGINT', () => void shutdown('SIGINT'));
+
+  const onSigint = () => {
+    // If a workflow is currently running, the first Ctrl+C asks it to cancel
+    // gracefully; the run() promise resolves, finally{} runs shutdown.
+    if (currentRunAbort && !currentRunAbort.signal.aborted) {
+      console.error(
+        `\n[mcp-playground] Ctrl+C — cancelling workflow (press again to force-exit)…`,
+      );
+      currentRunAbort.abort();
+      return;
+    }
+    void shutdown('SIGINT');
+  };
+  process.on('SIGINT', onSigint);
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
   const startup = await manager.start(config);
@@ -76,7 +101,6 @@ async function main(): Promise<void> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Subcommand: list-tools  (default)
-// Prints the aggregated tool catalog and exits.
 // ─────────────────────────────────────────────────────────────────────────────
 function runListTools(manager: ClientManager): void {
   const catalog = manager.getCatalog();
@@ -94,9 +118,6 @@ function runListTools(manager: ClientManager): void {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Subcommand: call-tool <qualifiedName> [<jsonArgs>]
-// Invokes a single tool. The full result envelope is printed to stdout as
-// pretty JSON — exactly what the user needs to discover output shapes before
-// writing a workflow that $refs into them.
 // ─────────────────────────────────────────────────────────────────────────────
 async function runCallTool(
   manager: ClientManager,
@@ -144,21 +165,33 @@ async function runCallTool(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Subcommand: run-workflow <workflowFile>
-// Loads + validates a workflow JSON and runs it end-to-end. Streams events
-// to stderr as they happen; prints the final WorkflowRunResult to stdout
-// as JSON (so it can be piped to jq, redirected to a file, etc.).
+// Subcommand: run-workflow <workflowFile> [--break-at <nodeId>]...
+//
+// Loads + validates a workflow JSON and runs it interactively. Streams
+// events to stderr as they happen; prints the final WorkflowRunResult to
+// stdout as JSON.
+//
+// Interactive controls during the run (see CliRunController):
+//   <Enter>            resume oldest paused node
+//   bp <nodeId>        arm a runtime breakpoint
+//   clear <nodeId>     remove a runtime breakpoint
+//   q | quit | cancel  cancel the workflow
+//   Ctrl+C             cancel the workflow (force-exit on second press)
+//
+// --break-at <nodeId> can be supplied repeatedly to PRE-ARM runtime
+// breakpoints before the first node launches.
 // ─────────────────────────────────────────────────────────────────────────────
 async function runWorkflowCmd(
   manager: ClientManager,
   args: string[],
 ): Promise<void> {
-  const [workflowPath] = args;
-  if (!workflowPath) {
-    console.error('\nUsage: run-workflow <path/to/workflow.json>');
+  const parsed = parseRunWorkflowArgs(args);
+  if (!parsed.ok) {
+    console.error(parsed.error);
     process.exitCode = 2;
     return;
   }
+  const { workflowPath, preArmedBreakpoints } = parsed;
 
   let workflow;
   try {
@@ -179,13 +212,39 @@ async function runWorkflowCmd(
     } (${workflow.nodes.length} nodes)\n`,
   );
 
-  const executor = new WorkflowExecutor({
-    call: (qualifiedName, callArgs) => manager.callTool(qualifiedName, callArgs),
-  });
-  executor.on(printEvent);
+  const abortController = new AbortController();
 
+  // The controller and the executor reference each other: the controller
+  // forwards `bp <nodeId>` commands to executor.setBreakpoint, and the
+  // executor calls back into the controller when a breakpoint fires. We
+  // break the cycle by giving the controller a closure that captures
+  // `executor` — assigned on the very next line.
+  let executor: WorkflowExecutor;
+  const controller = new CliRunController({
+    abortController,
+    setBreakpoint: (nodeId) => executor.setBreakpoint(nodeId),
+    clearBreakpoint: (nodeId) => executor.clearBreakpoint(nodeId),
+  });
+  executor = new WorkflowExecutor(
+    {
+      call: (qualifiedName, callArgs, options) =>
+        manager.callTool(qualifiedName, callArgs, options),
+    },
+    controller,
+  );
+
+  executor.on(printEvent);
+  controller.printHelp();
+
+  for (const nodeId of preArmedBreakpoints) {
+    executor.setBreakpoint(nodeId);
+  }
+
+  currentRunAbort = abortController;
   try {
-    const result = await executor.run(workflow);
+    const result = await executor.run(workflow, {
+      signal: abortController.signal,
+    });
     console.error('\n[run-workflow] summary:');
     console.error(`  status:   ${result.status}`);
     console.error(`  runId:    ${result.runId}`);
@@ -200,9 +259,60 @@ async function runWorkflowCmd(
       console.error(`\n[run-workflow] failed: ${(err as Error).message}`);
     }
     process.exitCode = 1;
+  } finally {
+    currentRunAbort = null;
+    controller.dispose();
   }
 }
 
+type ParsedRunWorkflowArgs =
+  | {
+      ok: true;
+      workflowPath: string;
+      preArmedBreakpoints: string[];
+    }
+  | { ok: false; error: string };
+
+function parseRunWorkflowArgs(args: string[]): ParsedRunWorkflowArgs {
+  let workflowPath: string | undefined;
+  const preArmedBreakpoints: string[] = [];
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === undefined) continue;
+    if (arg === '--break-at') {
+      const nodeId = args[++i];
+      if (!nodeId) {
+        return { ok: false, error: '--break-at requires a node id' };
+      }
+      preArmedBreakpoints.push(nodeId);
+      continue;
+    }
+    if (arg.startsWith('--')) {
+      return { ok: false, error: `Unknown flag: ${arg}` };
+    }
+    if (workflowPath) {
+      return {
+        ok: false,
+        error: `Unexpected extra positional argument: ${arg}`,
+      };
+    }
+    workflowPath = arg;
+  }
+
+  if (!workflowPath) {
+    return {
+      ok: false,
+      error:
+        '\nUsage: run-workflow <path/to/workflow.json> [--break-at <nodeId>]...',
+    };
+  }
+  return { ok: true, workflowPath, preArmedBreakpoints };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Event printer — one place that knows how each EngineEvent looks on stderr.
+// ─────────────────────────────────────────────────────────────────────────────
 function printEvent(evt: EngineEvent): void {
   switch (evt.type) {
     case 'workflow.started':
@@ -217,6 +327,12 @@ function printEvent(evt: EngineEvent): void {
         `      args (resolved): ${truncate(JSON.stringify(evt.resolvedArgs), 200)}`,
       );
       break;
+    case 'node.paused':
+      console.error(`  ⏸ ${evt.nodeId} paused (${evt.source} breakpoint)`);
+      break;
+    case 'node.resumed':
+      console.error(`  ▶ ${evt.nodeId} resumed (${evt.action})`);
+      break;
     case 'node.completed':
       console.error(`  ✓ ${evt.nodeId} done in ${evt.durationMs}ms`);
       break;
@@ -227,6 +343,12 @@ function printEvent(evt: EngineEvent): void {
       break;
     case 'node.skipped':
       console.error(`  ⊘ ${evt.nodeId} skipped: ${evt.reason}`);
+      break;
+    case 'breakpoint.added':
+      console.error(`  ● breakpoint armed on ${evt.nodeId}`);
+      break;
+    case 'breakpoint.cleared':
+      console.error(`  ○ breakpoint cleared on ${evt.nodeId}`);
       break;
     case 'workflow.completed':
       console.error(
@@ -276,8 +398,9 @@ function printUsage(): void {
     '  call-tool   <qualifiedName> [<jsonArgs>]  Invoke a single tool',
   );
   console.error(
-    '  run-workflow <workflowFile>          Execute a workflow JSON file',
+    '  run-workflow <workflowFile> [--break-at <nodeId>]...',
   );
+  console.error('                                       Execute a workflow JSON file');
   console.error('');
   console.error('Examples:');
   console.error('  npm start -- ../examples/mcp-config.json');
@@ -286,6 +409,9 @@ function printUsage(): void {
   );
   console.error(
     '  npm start -- ../examples/mcp-config.json run-workflow ../examples/workflow-hello.json',
+  );
+  console.error(
+    '  npm start -- ../examples/mcp-config.json run-workflow ../examples/workflow-parallel.json --break-at branchA',
   );
 }
 
