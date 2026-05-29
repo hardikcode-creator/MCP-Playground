@@ -1,7 +1,9 @@
 import type { RunRecord } from "../../types";
+import { KIND_CLASS, tokenizeJson } from "../../lib/jsonTokens";
 
 // Output is intentionally raw JSON only: MCP tool results vary wildly
 // (text, structured, images), so parsing per-tool isn't worth it here.
+// Actual result envelopes get syntax-colored; the idle/loading hints stay muted.
 export function ResponseViewer({ run, running }: { run: RunRecord | null; running: boolean }) {
   let body: string;
   let muted = false;
@@ -24,7 +26,13 @@ export function ResponseViewer({ run, running }: { run: RunRecord | null; runnin
         isError ? "border-red-900/60 bg-red-950/20" : "border-zinc-800 bg-zinc-950"
       } ${muted ? "text-zinc-500" : "text-zinc-300"}`}
     >
-      {body}
+      {muted
+        ? body
+        : tokenizeJson(body).map((t, i) => (
+            <span key={i} className={KIND_CLASS[t.kind]}>
+              {t.value}
+            </span>
+          ))}
     </pre>
   );
 }

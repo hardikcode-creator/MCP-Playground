@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useAppState } from "../../state/appState";
-import { Chevron } from "../../lib/icons";
+import { Chevron, Play, Spinner } from "../../lib/icons";
+import { findMissingRequired } from "../../lib/schema";
 import { ArgsInput } from "./ArgsInput";
 import { ResponseViewer } from "./ResponseViewer";
 
@@ -16,18 +17,25 @@ export function ToolInspectorPane({ onCollapse }: { onCollapse?: () => void }) {
     latestRunForSelected,
   } = useAppState();
 
-  const argsError = useMemo(() => {
-    if (!selectedDescriptor) return null;
+  const { argsError, missingRequired } = useMemo(() => {
+    const empty = { argsError: null as string | null, missingRequired: [] as string[] };
+    if (!selectedDescriptor) return empty;
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(argsText || "{}");
-      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-        return "Arguments must be a JSON object.";
-      }
-      return null;
+      parsed = JSON.parse(argsText || "{}");
     } catch {
-      return "Arguments are not valid JSON.";
+      return { ...empty, argsError: "Arguments are not valid JSON." };
     }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return { ...empty, argsError: "Arguments must be a JSON object." };
+    }
+    return {
+      argsError: null as string | null,
+      missingRequired: findMissingRequired(selectedDescriptor.inputSchema, parsed as Record<string, unknown>),
+    };
   }, [selectedDescriptor, argsText]);
+
+  const blocked = argsError !== null || missingRequired.length > 0;
 
   return (
     <section className="flex h-full flex-col border-l border-zinc-800 bg-zinc-900">
@@ -67,9 +75,14 @@ export function ToolInspectorPane({ onCollapse }: { onCollapse?: () => void }) {
                 setArgsText={setArgsText}
                 mode={argMode}
                 setMode={setArgMode}
+                missingRequired={missingRequired}
               />
               {argsError ? (
                 <span className="text-xs text-red-400">{argsError}</span>
+              ) : missingRequired.length > 0 ? (
+                <span className="text-xs text-red-400">
+                  Fill the required field{missingRequired.length === 1 ? "" : "s"} highlighted above to run.
+                </span>
               ) : (
                 <span className="text-xs text-zinc-500">
                   Params build the args for you · switch to Raw for full control.
@@ -77,17 +90,38 @@ export function ToolInspectorPane({ onCollapse }: { onCollapse?: () => void }) {
               )}
             </div>
 
-            <div>
+            <div className="group flex items-center gap-3">
               <button
                 type="button"
-                disabled={running || argsError !== null}
+                disabled={running || blocked}
                 onClick={() => {
                   void runTool();
                 }}
-                className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white shadow-lg shadow-emerald-900/30 transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+                aria-label="Run tool"
+                title="Run tool"
+                className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 transition-all duration-200 ease-spring hover:scale-105 hover:border-emerald-400/60 hover:bg-emerald-500/20 hover:text-emerald-200 active:scale-95 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-transparent disabled:text-zinc-600 disabled:hover:scale-100"
               >
-                {running ? "Running…" : "Run"}
+                {!running && !blocked && (
+                  <span
+                    className="animate-pulse-glow absolute -inset-1 rounded-full bg-emerald-500/20 blur-md"
+                    aria-hidden="true"
+                  />
+                )}
+                {running ? (
+                  <Spinner className="relative h-5 w-5 text-emerald-300" />
+                ) : (
+                  <Play className="relative ml-0.5 h-4 w-4" />
+                )}
               </button>
+              <span className="font-mono text-xs text-zinc-500 transition-colors group-hover:text-zinc-300">
+                {running
+                  ? "Running…"
+                  : argsError
+                    ? "Fix args to run"
+                    : missingRequired.length > 0
+                      ? `Fill required: ${missingRequired.join(", ")}`
+                      : "Run Tool"}
+              </span>
             </div>
 
             <div className="flex flex-col gap-1.5">

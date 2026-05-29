@@ -12,7 +12,7 @@ export function ConnectionIssues({
   return (
     <div className="flex flex-col gap-2">
       {failed.length > 0 && (
-        <div className="rounded-md border border-red-900/60 bg-red-950/40 p-2.5">
+        <div className="rounded-lg border border-red-900/60 bg-red-950/40 p-2.5">
           <div className="text-xs font-semibold text-red-300">
             {failed.length} server{failed.length === 1 ? "" : "s"} failed to start
           </div>
@@ -26,7 +26,7 @@ export function ConnectionIssues({
         </div>
       )}
       {skipped.length > 0 && (
-        <div className="rounded-md border border-amber-900/60 bg-amber-950/40 p-2.5">
+        <div className="rounded-lg border border-amber-900/60 bg-amber-950/40 p-2.5">
           <div className="text-xs font-semibold text-amber-300">
             {skipped.length} server{skipped.length === 1 ? "" : "s"} skipped
           </div>

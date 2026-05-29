@@ -30,8 +30,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const loadExample = useCallback(() => setConfigText(EXAMPLE_CONFIG), []);
 
-  const connect = useCallback(async () => {
-    const result = validateConfig(configText);
+  const connect = useCallback(async (configOverride?: string) => {
+    const result = validateConfig(configOverride ?? configText);
     if (!result.ok) {
       setConnStatus("error");
       setConnectError(result.errors.map((e) => `${e.path}: ${e.message}`).join("; "));
@@ -65,6 +65,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setRuns([]);
     setRunning(false);
   }, []);
+
+  // Non-destructive navigation: keep the connection/catalog/runs intact so the
+  // user can hop to the home screen and back without reconnecting.
+  const goHome = useCallback(() => setView("home"), []);
+  const goWorkspace = useCallback(() => setView("workspace"), []);
 
   const selectedDescriptor = useMemo(
     () => catalog.find((t) => t.qualifiedName === selectedTool) ?? null,
@@ -160,6 +165,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       loadExample,
       connect,
       reset,
+      goHome,
+      goWorkspace,
       selectTool,
       setArgsText,
       setArgMode,
@@ -185,6 +192,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       loadExample,
       connect,
       reset,
+      goHome,
+      goWorkspace,
       selectTool,
       runTool,
     ],

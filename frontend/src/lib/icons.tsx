@@ -34,12 +34,57 @@ export function BrandLogo({
   className?: string;
   animated?: boolean;
 }) {
-  // transform-box: fill-box keeps each node scaling around its own center.
+  // transform-box: fill-box keeps each node scaling around its own center; the
+  // shared 2.2s period (matching the packet orbit) lets nodes light in sequence.
   const node = (delay: string) =>
     animated
-      ? { transformBox: "fill-box" as const, transformOrigin: "center", animationDelay: delay }
+      ? {
+          transformBox: "fill-box" as const,
+          transformOrigin: "center",
+          animationDelay: delay,
+          animationDuration: "2.2s",
+        }
       : undefined;
   const pulse = animated ? " animate-node-pulse" : "";
+
+  // Three nodes wired into a closed triangle. When animated, a single emerald
+  // packet continuously orbits the edges (dash travelling around the perimeter)
+  // and each node pulses as it passes — a living mesh, not a static badge.
+  const TRIANGLE = "M10.5 11 L21.5 11 L16 21 Z";
+
+  const inner = (
+    <>
+      <path d={TRIANGLE} className="stroke-zinc-700" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      {animated && (
+        <path
+          d={TRIANGLE}
+          className="animate-packet stroke-emerald-300"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeDasharray="2.5 31.3"
+        />
+      )}
+      <circle cx="10.5" cy="11" r="2.9" className={`fill-emerald-400${pulse}`} style={node("0s")} />
+      <circle
+        cx="21.5"
+        cy="11"
+        r="2.9"
+        className={`fill-zinc-900 stroke-cyan-300${pulse}`}
+        strokeWidth="1.7"
+        style={node("0.7s")}
+      />
+      <circle
+        cx="16"
+        cy="21"
+        r="2.9"
+        className={`fill-zinc-900 stroke-emerald-400${pulse}`}
+        strokeWidth="1.7"
+        style={node("1.45s")}
+      />
+    </>
+  );
+
   return (
     <svg
       width={size}
@@ -50,39 +95,16 @@ export function BrandLogo({
       role="img"
       aria-label="MCP Playground"
     >
-      <rect x="1.5" y="1.5" width="29" height="29" rx="8" className="fill-zinc-900 stroke-zinc-700" strokeWidth="1.5" />
-      <path
-        d="M10.5 11 L15.8 19.5 M21.5 11 L16.2 19.5"
-        className="stroke-zinc-700"
-        strokeWidth="1.3"
-        strokeLinecap="round"
+      <rect
+        x="1.5"
+        y="1.5"
+        width="29"
+        height="29"
+        rx="8"
+        className={animated ? "fill-none stroke-zinc-700/40" : "fill-zinc-900 stroke-zinc-700"}
+        strokeWidth="1.5"
       />
-      {animated && (
-        <path
-          d="M10.5 11 L15.8 19.5 M21.5 11 L16.2 19.5"
-          className="animate-dash stroke-emerald-400"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeDasharray="2 10"
-        />
-      )}
-      <circle cx="10.5" cy="11" r="2.9" className={`fill-emerald-500${pulse}`} style={node("0s")} />
-      <circle
-        cx="21.5"
-        cy="11"
-        r="2.9"
-        className={`fill-zinc-900 stroke-emerald-400${pulse}`}
-        strokeWidth="1.7"
-        style={node("0.45s")}
-      />
-      <circle
-        cx="16"
-        cy="21"
-        r="2.9"
-        className={`fill-zinc-900 stroke-zinc-400${pulse}`}
-        strokeWidth="1.7"
-        style={node("0.9s")}
-      />
+      {inner}
     </svg>
   );
 }
@@ -189,6 +211,49 @@ export function Chevron({ dir = "left", className }: { dir?: "left" | "right"; c
       aria-hidden="true"
     >
       <path d={dir === "left" ? "M10 4 6 8 10 12" : "M6 4 10 8 6 12"} />
+    </svg>
+  );
+}
+
+export function Home({ className }: { className?: string }) {
+  return (
+    <svg
+      width={14}
+      height={14}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`shrink-0 ${className ?? ""}`}
+      aria-hidden="true"
+    >
+      <path d="M2.5 7.5 8 2.5l5.5 5M4 6.7V13h8V6.7M6.5 13V9.5h3V13" />
+    </svg>
+  );
+}
+
+export function Play({ className }: { className?: string }) {
+  return (
+    <svg width={20} height={20} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M8 5.14c0-.86.96-1.37 1.67-.88l9.2 6.86a1.06 1.06 0 0 1 0 1.76l-9.2 6.86c-.71.49-1.67-.02-1.67-.88z" />
+    </svg>
+  );
+}
+
+export function Spinner({ className }: { className?: string }) {
+  return (
+    <svg
+      width={20}
+      height={20}
+      viewBox="0 0 24 24"
+      fill="none"
+      className={`animate-spin ${className ?? ""}`}
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" className="opacity-25" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
     </svg>
   );
 }

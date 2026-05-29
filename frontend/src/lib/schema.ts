@@ -61,3 +61,12 @@ export function applyParamValue(
   for (const k of Object.keys(merged)) if (!(k in ordered)) ordered[k] = merged[k];
   return ordered;
 }
+
+// Names of required fields whose value is absent or blank (undefined/null/"").
+// Booleans (false), numbers (0), and empty arrays/objects count as provided.
+export function findMissingRequired(schema: JsonSchema, args: Record<string, unknown>): string[] {
+  return (schema.required ?? []).filter((name) => {
+    const v = args[name];
+    return v === undefined || v === null || v === "";
+  });
+}

@@ -37,8 +37,10 @@ export type AppStateValue = {
   // actions
   setConfigText: (text: string) => void;
   loadExample: () => void;
-  connect: () => Promise<void>;
+  connect: (configOverride?: string) => Promise<void>;
   reset: () => void;
+  goHome: () => void;
+  goWorkspace: () => void;
   selectTool: (qualifiedName: string) => void;
   setArgsText: (text: string) => void;
   setArgMode: (mode: ArgMode) => void;
