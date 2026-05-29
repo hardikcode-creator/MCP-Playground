@@ -1,0 +1,8 @@
+# List the catalog (default)
+npm start -- ../examples/mcp-config.json
+
+# Discover what a tool returns (use this when authoring workflows)
+npm start -- ../examples/mcp-config.json call-tool everything__get-sum '{"a":5,"b":7}'
+
+# Run a workflow end-to-end
+npm start -- ../examples/mcp-config.json run-workflow ../examples/workflow-hello.json

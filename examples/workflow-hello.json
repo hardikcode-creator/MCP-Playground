@@ -1,0 +1,24 @@
+{
+  "id": "hello-workflow",
+  "version": 1,
+  "name": "Add two numbers, then echo the result via a $ref",
+  "nodes": [
+    {
+      "id": "sum",
+      "tool": "everything__get-sum",
+      "args": {
+        "a": 5,
+        "b": 7
+      }
+    },
+    {
+      "id": "echo_sum",
+      "tool": "everything__echo",
+      "args": {
+        "message": {
+          "$ref": { "nodeId": "sum", "path": "$.content[0].text" }
+        }
+      }
+    }
+  ]
+}
