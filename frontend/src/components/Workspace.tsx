@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { useAppState } from "../state/appState";
-import { BrandLogo, Chevron } from "../lib/icons";
+import { BrandLogo, Chevron, Home } from "../lib/icons";
 import { ServerCatalogPane } from "./catalog/ServerCatalogPane";
 import { ToolInspectorPane } from "./inspector/ToolInspectorPane";
 import { WorkflowCanvasPane } from "./WorkflowCanvasPane";
@@ -40,7 +40,7 @@ function Rail({ label, side, onExpand }: { label: string; side: "left" | "right"
 }
 
 export function Workspace() {
-  const { config, connectedCount, catalog, failed, skipped, reset } = useAppState();
+  const { config, connectedCount, catalog, failed, skipped, goHome } = useAppState();
   const total = config?.servers.length ?? 0;
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
@@ -48,10 +48,16 @@ export function Workspace() {
   return (
     <div className="flex h-screen flex-col bg-zinc-950 text-zinc-100">
       <header className="flex items-center gap-3 border-b border-zinc-800 bg-zinc-900 px-3 py-2">
-        <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={goHome}
+          title="Back to home"
+          aria-label="Back to home"
+          className="-ml-1 flex items-center gap-2 rounded-lg px-1.5 py-1 transition-colors hover:bg-zinc-800/70"
+        >
           <BrandLogo size={22} />
-          <span className="font-display text-sm font-semibold tracking-tight">MCP Playground</span>
-        </div>
+          <span className="text-grad font-display text-sm font-bold tracking-tight">MCP Playground</span>
+        </button>
 
         <div className="ml-1 flex flex-wrap items-center gap-1.5">
           <StatusPill dot={total > 0 && connectedCount === total ? "bg-emerald-400" : "bg-amber-400"}>
@@ -62,13 +68,15 @@ export function Workspace() {
           {skipped.length > 0 && <StatusPill dot="bg-amber-400">{skipped.length} skipped</StatusPill>}
         </div>
 
-        <button
-          type="button"
-          onClick={reset}
-          className="ml-auto rounded-md px-2.5 py-1 text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
-        >
-          Change config
-        </button>
+        <div className="ml-auto flex items-center gap-1.5">
+          <button type="button" onClick={goHome} title="Home" className="btn-ghost px-2.5 py-1.5 text-xs">
+            <Home />
+            Home
+          </button>
+          <button type="button" onClick={goHome} className="btn-ghost px-3 py-1.5 text-xs">
+            Change config
+          </button>
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">

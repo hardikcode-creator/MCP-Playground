@@ -1,20 +1,27 @@
 import type { ParamRow } from "../../lib/schema";
 
-const inputCls =
-  "w-full rounded-md border border-zinc-700 bg-zinc-950 px-2.5 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none";
+const baseCls =
+  "w-full rounded-md border bg-zinc-950 px-2.5 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none";
 
 // A single typed control. Cleared inputs keep their key (empty string for
 // text/enum, null for number) so the args object stays stable and in schema
-// order instead of losing fields when emptied.
+// order instead of losing fields when emptied. `invalid` paints the border red
+// for empty required fields.
 export function ParamField({
   def,
   value,
+  invalid = false,
   onChange,
 }: {
   def: ParamRow;
   value: unknown;
+  invalid?: boolean;
   onChange: (next: unknown) => void;
 }) {
+  const inputCls = `${baseCls} ${
+    invalid ? "border-red-500/70 focus:border-red-400" : "border-zinc-700 focus:border-emerald-500"
+  }`;
+
   if (def.enum && def.enum.length > 0) {
     return (
       <select
