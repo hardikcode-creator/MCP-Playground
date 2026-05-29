@@ -15,9 +15,7 @@ export type ToolDescriptor = {
 };
 
 /**
- * Per-server env-var values supplied at runtime (typically by the UI after
- * the user fills in a "this config needs these secrets" form).
- * Shape: `{ [serverName]: { [envVarName]: value } }`.
+ *Schema for clients and typescript types
  */
 export type ProvidedEnv = Record<string, Record<string, string>>;
 
@@ -43,9 +41,7 @@ const CLIENT_INFO = {
 const CONNECT_TIMEOUT_MS = 30_000;
 
 /**
- * Manages a collection of spawned MCP server child processes.
- * Each server is connected as an MCP client; its tools are listed
- * and exposed under a namespace prefix to avoid collisions.
+ * ClientManager handles connection parsing and listing of tools from MCP servers.
  */
 export class ClientManager {
   private clients = new Map<string, ManagedClient>();
@@ -152,6 +148,12 @@ export class ClientManager {
     return [...this.clients.keys()];
   }
 
+
+  /**
+   * This functions are for handling tool calls and list of tools from MCP servers.
+   */
+
+
   /** Look up which server owns a qualified tool name. */
   findToolOwner(
     qualifiedName: string,
@@ -197,18 +199,7 @@ export class ClientManager {
     await Promise.allSettled(tasks);
     this.clients.clear();
   }
-  /**
-   * Invoke a single tool by its qualified name (e.g. "filesystem__list_directory").
-   *
-   * Returns the FULL tool result envelope (with `content`, `structuredContent`,
-   * `isError`, etc.) so callers can JSONPath into either text content
-   * (`$.content[0].text`) or structured payloads (`$.structuredContent.foo`)
-   * via $ref in downstream workflow nodes.
-   *
-   * If the tool reports `isError: true`, this throws — that way workflow
-   * executors see it as a failed node rather than a "successful" result they'd
-   * try to substitute into downstream args.
-   */
+  
   async callTool(
     qualifiedName: string,
     args: Record<string, unknown>,

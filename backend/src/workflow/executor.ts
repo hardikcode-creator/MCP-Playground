@@ -10,7 +10,9 @@ import {
 import {
   buildAdjacency,
   type DependencyMap,
+  normalizeWorkflow,
   topoSort,
+  validateDependsOn,
   validateRefs,
 } from './graph.js';
 import { RefResolutionError, resolveArgs } from './refs.js';
@@ -29,16 +31,22 @@ export interface ToolCaller {
  * Runs a Workflow DAG.
  *
  * Lifecycle per invocation of run():
- *   1. validateRefs   — every $ref points to an existing node, no self-refs
- *   2. topoSort       — throws CycleError if the dep graph isn't a DAG
- *   3. seed `ready` with nodes that have no incoming edges
- *   4. loop:
+ *   1. validateRefs       — every $ref points to an existing node, no self-refs
+ *   2. validateDependsOn  — every explicit dependsOn entry points to an existing node
+ *   3. normalizeWorkflow  — union ref sources into dependsOn so it becomes the
+ *                           canonical dependency list (idempotent; defensive
+ *                           in case the workflow wasn't loaded via the loader)
+ *   4. topoSort           — throws CycleError if the dep graph isn't a DAG
+ *                           (catches both data-ref cycles and dependsOn cycles
+ *                           because they're now the same graph)
+ *   5. seed `ready` with nodes that have no incoming edges
+ *   6. loop:
  *        - move every ready node into `inflight`, launch its promise
  *        - await Promise.race(inflight.values())
  *        - on completion: cache result, unlock dependents whose deps are all done
  *        - on failure: transitively mark dependents as `skipped`
  *      until both `ready` and `inflight` are empty
- *   5. emit workflow.completed; return WorkflowRunResult
+ *   7. emit workflow.completed; return WorkflowRunResult
  *
  * The executor emits an EngineEvent for every state transition. CLI subscribes
  * and prints them; future WebSocket subscriber will broadcast them — identical
@@ -58,16 +66,29 @@ export class WorkflowExecutor {
     this.emitter.emit('event', event);
   }
 
-  async run(workflow: Workflow): Promise<WorkflowRunResult> {
-    const refErrors = validateRefs(workflow);
-    if (refErrors.length > 0) {
+  async run(input: Workflow): Promise<WorkflowRunResult> {
+    // Validate $refs and explicit dependsOn against the ORIGINAL workflow so
+    // error messages mention the exact form the user authored.
+    const refErrors = validateRefs(input);
+    const depErrors = validateDependsOn(input);
+    const allErrors = [...refErrors, ...depErrors];
+    if (allErrors.length > 0) {
       throw new Error(
-        `Workflow has invalid references:\n${refErrors
+        `Workflow has invalid dependencies:\n${allErrors
           .map((e) => `  - ${e}`)
           .join('\n')}`,
       );
     }
-    topoSort(workflow); // for its side effect: throws CycleError if any cycle exists
+
+    // Normalize: union ref sources into dependsOn so dependsOn becomes the
+    // single source of truth for ordering. Idempotent: a no-op if the workflow
+    // came from `loadWorkflowFromFile` (which already normalized).
+    const workflow = normalizeWorkflow(input);
+
+    // Cycle detection runs on the normalized graph, so it catches cycles
+    // formed by data refs AND/OR by explicit dependsOn — they're now the
+    // same edge set.
+    topoSort(workflow);
 
     const { incoming, outgoing } = buildAdjacency(workflow);
     const nodeById = new Map(workflow.nodes.map((n) => [n.id, n]));
