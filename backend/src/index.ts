@@ -5,11 +5,7 @@ import { WorkflowValidationError } from './types/workflow.js';
 import { CycleError } from './workflow/graph.js';
 import { WorkflowExecutor } from './workflow/executor.js';
 import { loadWorkflowFromFile } from './workflow/loader.js';
-
-type StartupReport = {
-  failed: { name: string; error: string }[];
-  skipped: { name: string; missingEnv: string[] }[];
-};
+import type { StartResult } from './mcp/client-manager.js';
 
 async function main(): Promise<void> {
   const [
@@ -140,7 +136,7 @@ async function runCallTool(
   try {
     const result = await manager.callTool(toolName, parsedArgs);
     const ms = Date.now() - started;
-    console.error(`  ✓ done in ${ms}ms\n`);
+    console.error(`\n\n✓ done in ${ms}ms\n`);
     console.log(JSON.stringify(result, null, 2));
   } catch (err) {
     console.error(`  ✕ failed: ${(err as Error).message}`);
@@ -245,7 +241,7 @@ function truncate(s: string, max: number): string {
   return s.length > max ? `${s.slice(0, max)}… (${s.length - max} more chars)` : s;
 }
 
-function reportStartupIssues({ skipped, failed }: StartupReport): void {
+function reportStartupIssues({ skipped, failed }: StartResult): void {
   if (skipped.length > 0) {
     console.error(
       `\n[mcp-playground] ${skipped.length} server(s) skipped due to missing required env vars:`,

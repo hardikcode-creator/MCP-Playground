@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 
+// Parsing logic for MCP servers configs
 const SERVER_NAME_PATTERN = /^[a-z][a-z0-9_-]*$/i;
 
 export const ServerConfigSchema = z.object({
