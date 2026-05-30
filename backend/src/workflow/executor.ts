@@ -67,6 +67,13 @@ export type RunOptions = {
    * `'cancelled'`.
    */
   signal?: AbortSignal;
+  /**
+   * Resume support: results for nodes that already completed in a prior run,
+   * keyed by node id. Seeded nodes are marked `completed` up front (not
+   * re-run); their cached results feed downstream `$ref` resolution exactly as
+   * if this run had produced them, so only the failed/remaining nodes execute.
+   */
+  seedResults?: Record<string, unknown>;
 };
 
 /**
@@ -200,6 +207,14 @@ export class WorkflowExecutor {
     const workflow = normalizeWorkflow(input);
     topoSort(workflow);
 
+    // Seed authored breakpoints (`breakpoint: true`) into the runtime set so the
+    // runtime set is the single source of truth for "is this node armed". That
+    // lets a breakpoint toggled OFF on the fly be honored — including authored
+    // ones — and re-armed via setBreakpoint, all through one mutable set.
+    for (const node of workflow.nodes) {
+      if (node.breakpoint === true) this.runtimeBreakpoints.add(node.id);
+    }
+
     const { incoming, outgoing } = buildAdjacency(workflow);
     const nodeById = new Map(workflow.nodes.map((n) => [n.id, n]));
     const results = new Map<string, unknown>();
@@ -225,11 +240,39 @@ export class WorkflowExecutor {
     const ready = new Set<string>();
     const inflight = new Map<string, Promise<{ nodeId: string }>>();
 
-    for (const [nodeId, deps] of incoming) {
-      if (deps.size === 0) {
-        states.get(nodeId)!.status = 'ready';
-        ready.add(nodeId);
-        this.emit({ type: 'node.ready', nodeId });
+    // Resume: mark seeded nodes 'completed' before scheduling so they don't
+    // re-run and their cached results are available to downstream $refs.
+    const seed = options.seedResults;
+    if (seed) {
+      for (const node of workflow.nodes) {
+        if (!Object.prototype.hasOwnProperty.call(seed, node.id)) continue;
+        const result = seed[node.id];
+        const state = states.get(node.id)!;
+        results.set(node.id, result);
+        state.status = 'completed';
+        state.result = result;
+        state.startedAt = startedAt;
+        state.finishedAt = startedAt;
+        state.durationMs = 0;
+        this.emit({
+          type: 'node.completed',
+          nodeId: node.id,
+          result,
+          durationMs: 0,
+        });
+      }
+    }
+
+    // Ready = every still-pending node whose deps are all completed. With no
+    // seed that's exactly the roots; with a seed it also includes nodes
+    // unlocked by the seeded completions (e.g. the previously-failed node).
+    for (const node of workflow.nodes) {
+      const state = states.get(node.id)!;
+      if (state.status !== 'pending') continue;
+      if (allDepsCompleted(node.id, incoming, states)) {
+        state.status = 'ready';
+        ready.add(node.id);
+        this.emit({ type: 'node.ready', nodeId: node.id });
       }
     }
 
@@ -357,12 +400,12 @@ export class WorkflowExecutor {
     // pauses the same way — the only difference is what we report to the UI.
     // We re-check the runtime set HERE (not earlier) so a breakpoint added
     // after a node went ready but before it ran still takes effect.
-    const runtimeBp = this.runtimeBreakpoints.has(node.id);
-    const authoredBp = node.breakpoint === true;
-    if (authoredBp || runtimeBp) {
-      const source: BreakpointContext['source'] = authoredBp
-        ? 'authored'
-        : 'runtime';
+    // Authored breakpoints are seeded into the runtime set at run start, so the
+    // set is the single source of truth: a breakpoint cleared on the fly
+    // (authored or runtime) won't pause here, and one re-armed will.
+    if (this.runtimeBreakpoints.has(node.id)) {
+      const source: BreakpointContext['source'] =
+        node.breakpoint === true ? 'authored' : 'runtime';
       const outcome = await this.handlePause(
         node,
         state,

@@ -95,10 +95,17 @@ export type WorkflowRunOptions = {
   onEvent: (event: EngineEvent) => void;
   pauseHandler: PauseHandler;
   signal?: AbortSignal;
+  // Resume: results of nodes that already completed, keyed by node id. Seeded
+  // nodes are reported completed and skipped; only the rest re-run.
+  seedResults?: Record<string, unknown>;
 };
 
 export interface WorkflowRunner {
   run(workflow: Workflow, options: WorkflowRunOptions): Promise<WorkflowRunResult>;
+  // Arm/clear a runtime breakpoint on the in-flight run (no-op when idle). Lets
+  // the UI add a breakpoint on the fly; it's honored before that node starts.
+  setBreakpoint(nodeId: string): void;
+  clearBreakpoint(nodeId: string): void;
 }
 
 export type CallToolFn = (
@@ -111,18 +118,35 @@ export type CallToolFn = (
 // mock client's callTool as the ToolCaller. Honors the abort signal end-to-end.
 export class LocalWorkflowRunner implements WorkflowRunner {
   private readonly callTool: CallToolFn;
+  // The executor for the current run, so breakpoints can be armed mid-flight.
+  private executor: WorkflowExecutor | null = null;
 
   constructor(callTool: CallToolFn) {
     this.callTool = callTool;
   }
 
-  run(workflow: Workflow, { onEvent, pauseHandler, signal }: WorkflowRunOptions): Promise<WorkflowRunResult> {
+  run(
+    workflow: Workflow,
+    { onEvent, pauseHandler, signal, seedResults }: WorkflowRunOptions,
+  ): Promise<WorkflowRunResult> {
     const toolCaller: ToolCaller = {
       call: (qualifiedName, args, options) => this.callTool(qualifiedName, args, options),
     };
     const executor = new WorkflowExecutor(toolCaller, pauseHandler);
+    this.executor = executor;
     const off = executor.on(onEvent);
-    return executor.run(workflow, { signal }).finally(off);
+    return executor.run(workflow, { signal, seedResults }).finally(() => {
+      off();
+      this.executor = null;
+    });
+  }
+
+  setBreakpoint(nodeId: string): void {
+    this.executor?.setBreakpoint(nodeId);
+  }
+
+  clearBreakpoint(nodeId: string): void {
+    this.executor?.clearBreakpoint(nodeId);
   }
 }
 
@@ -134,6 +158,8 @@ export class LocalWorkflowRunner implements WorkflowRunner {
 //   - an aborted signal   -> send a cancel frame
 export class WebSocketWorkflowRunner implements WorkflowRunner {
   private readonly conn: WsConnection;
+  // The active run's id, so breakpoint control frames target the right run.
+  private runId: string | null = null;
 
   constructor(conn: WsConnection) {
     this.conn = conn;
@@ -141,9 +167,10 @@ export class WebSocketWorkflowRunner implements WorkflowRunner {
 
   async run(
     workflow: Workflow,
-    { onEvent, pauseHandler, signal }: WorkflowRunOptions,
+    { onEvent, pauseHandler, signal, seedResults }: WorkflowRunOptions,
   ): Promise<WorkflowRunResult> {
     const runId = this.conn.nextId("run");
+    this.runId = runId;
 
     const onAbort = () => this.conn.send({ type: "cancel", runId });
     if (signal) {
@@ -169,10 +196,19 @@ export class WebSocketWorkflowRunner implements WorkflowRunner {
     };
 
     try {
-      return await this.conn.runWorkflow(runId, workflow, handleEvent);
+      return await this.conn.runWorkflow(runId, workflow, handleEvent, seedResults);
     } finally {
+      this.runId = null;
       if (signal) signal.removeEventListener("abort", onAbort);
     }
+  }
+
+  setBreakpoint(nodeId: string): void {
+    if (this.runId) this.conn.send({ type: "setBreakpoint", runId: this.runId, nodeId });
+  }
+
+  clearBreakpoint(nodeId: string): void {
+    if (this.runId) this.conn.send({ type: "clearBreakpoint", runId: this.runId, nodeId });
   }
 }
 

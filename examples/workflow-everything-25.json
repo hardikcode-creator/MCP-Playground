@@ -1,0 +1,141 @@
+{
+  "id": "food-pipeline-25",
+  "version": 1,
+  "name": "Food-order pipeline (25 nodes): parallel branches, $ref chaining, 4 breakpoints, fan-in",
+  "nodes": [
+    {
+      "id": "n01_intake",
+      "tool": "everything__echo",
+      "args": { "message": "Customer opened the food app" },
+      "breakpoint": true
+    },
+    {
+      "id": "n02_address",
+      "tool": "everything__echo",
+      "args": { "message": "Saved address loaded: 12 MG Road, Bengaluru 560001" }
+    },
+    {
+      "id": "n03_session",
+      "tool": "everything__echo",
+      "args": { "message": "Session token minted: tok_8f3a" }
+    },
+    {
+      "id": "n04_geo",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "n02_address", "path": "$.content[0].text" } } }
+    },
+    {
+      "id": "n05_menu_pizza",
+      "tool": "everything__echo",
+      "args": { "message": "Indexing menu: Napoli Pizzeria" },
+      "dependsOn": ["n01_intake"]
+    },
+    {
+      "id": "n06_menu_sushi",
+      "tool": "everything__echo",
+      "args": { "message": "Indexing menu: Sakura Sushi" },
+      "dependsOn": ["n01_intake"]
+    },
+    {
+      "id": "n07_menu_burger",
+      "tool": "everything__echo",
+      "args": { "message": "Indexing menu: Patty & Bun" },
+      "dependsOn": ["n01_intake"]
+    },
+    {
+      "id": "n08_auth",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "n03_session", "path": "$.content[0].text" } } },
+      "breakpoint": true
+    },
+    {
+      "id": "n09_search_pizza",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "n05_menu_pizza", "path": "$.content[0].text" } } }
+    },
+    {
+      "id": "n10_search_sushi",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "n06_menu_sushi", "path": "$.content[0].text" } } }
+    },
+    {
+      "id": "n11_search_burger",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "n07_menu_burger", "path": "$.content[0].text" } } }
+    },
+    {
+      "id": "n12_prefs",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "n04_geo", "path": "$.content[0].text" } } }
+    },
+    {
+      "id": "n13_rank_pizza",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "n09_search_pizza", "path": "$.content[0].text" } } },
+      "breakpoint": true
+    },
+    {
+      "id": "n14_rank_sushi",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "n10_search_sushi", "path": "$.content[0].text" } } }
+    },
+    {
+      "id": "n15_rank_burger",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "n11_search_burger", "path": "$.content[0].text" } } }
+    },
+    {
+      "id": "n16_apply_prefs",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "n12_prefs", "path": "$.content[0].text" } } }
+    },
+    {
+      "id": "n17_top_picks",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "n13_rank_pizza", "path": "$.content[0].text" } } },
+      "dependsOn": ["n14_rank_sushi", "n15_rank_burger", "n16_apply_prefs"]
+    },
+    {
+      "id": "n18_subtotal",
+      "tool": "everything__get-sum",
+      "args": { "a": 540, "b": 260 }
+    },
+    {
+      "id": "n19_eta",
+      "tool": "everything__get-sum",
+      "args": { "a": 18, "b": 7 }
+    },
+    {
+      "id": "n20_cart",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "n17_top_picks", "path": "$.content[0].text" } } },
+      "breakpoint": true
+    },
+    {
+      "id": "n21_promo",
+      "tool": "everything__echo",
+      "args": { "message": "Applied promo FOODIE20 (-20%)" }
+    },
+    {
+      "id": "n22_pay_auth",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "n08_auth", "path": "$.content[0].text" } } }
+    },
+    {
+      "id": "n23_confirm",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "n20_cart", "path": "$.content[0].text" } } },
+      "dependsOn": ["n21_promo", "n22_pay_auth"]
+    },
+    {
+      "id": "n24_notify",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "n23_confirm", "path": "$.content[0].text" } } }
+    },
+    {
+      "id": "n25_done",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "n24_notify", "path": "$.content[0].text" } } }
+    }
+  ]
+}

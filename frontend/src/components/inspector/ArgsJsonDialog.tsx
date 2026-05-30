@@ -1,17 +1,8 @@
 import { useEffect } from "react";
 import type { JsonSchema } from "../../types";
 import { validateArgs } from "../../lib/schema";
+import { formatJson } from "../../lib/jsonTokens";
 import { CodeEditor } from "../common/CodeEditor";
-
-function isParseableJson(text: string): boolean {
-  if (text.trim().length === 0) return false;
-  try {
-    JSON.parse(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 // A roomy pop-out editor for a tool's arguments as JSON, validated live against
 // the tool's inputSchema. It is *live-bound*: edits call onChange (setArgsText)
@@ -39,14 +30,11 @@ export function ArgsJsonDialog({
   }, [onClose]);
 
   const v = validateArgs(schema, value);
-  const canFormat = isParseableJson(value);
+  const formatted = formatJson(value);
+  const canFormat = formatted !== null && formatted !== value;
 
   const format = () => {
-    try {
-      onChange(JSON.stringify(JSON.parse(value.trim() || "{}"), null, 2));
-    } catch {
-      // Not parseable — Format is disabled in this state, so this is unreachable.
-    }
+    if (formatted) onChange(formatted);
   };
 
   return (

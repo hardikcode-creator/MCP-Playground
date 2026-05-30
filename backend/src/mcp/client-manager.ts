@@ -231,8 +231,59 @@ export class ClientManager {
       const message = extractErrorMessage(result);
       throw new Error(`Tool "${qualifiedName}" reported error: ${message}`);
     }
+    return enrichWithStructuredContent(result);
+  }
+}
+
+/**
+ * Server-agnostic result enrichment.
+ *
+ * Many MCP servers (the deprecated GitHub server, older community servers,
+ * anything predating the structured-output spec) return their payload as a
+ * JSON string in the first text content block and DO NOT populate the
+ * optional `structuredContent` field. Workflow `$ref`s resolve via JSONPath
+ * over the raw tool result, so without structured data a ref can only ever
+ * reach the whole text blob (a single string) — never a nested field like
+ * `$.structuredContent.number`.
+ *
+ * This lifts that first text block into `structuredContent` when it is a JSON
+ * object or array, so refs into structured fields work uniformly across every
+ * server. It is intentionally conservative and safe to apply to all servers:
+ *   - servers that already provide `structuredContent` are left untouched
+ *     (no double-parsing, their richer output wins)
+ *   - only JSON objects/arrays are lifted; plain prose and bare primitives
+ *     (e.g. "8", "ok", "true") stay text-only, so nothing is misinterpreted
+ *   - parse failures are swallowed and the original result is returned as-is
+ */
+export function enrichWithStructuredContent(result: unknown): unknown {
+  if (typeof result !== 'object' || result === null) return result;
+  const r = result as Record<string, unknown>;
+
+  // Respect servers that already emit structured output.
+  if (r.structuredContent !== undefined) return result;
+
+  const content = r.content;
+  if (!Array.isArray(content) || content.length === 0) return result;
+
+  const first = content[0] as { type?: unknown; text?: unknown } | null;
+  if (!first || first.type !== 'text' || typeof first.text !== 'string') {
     return result;
   }
+
+  const text = first.text.trim();
+  // Cheap guard: only attempt a parse for things that look like JSON
+  // objects/arrays. Skips prose and primitives without paying for a throw.
+  if (text[0] !== '{' && text[0] !== '[') return result;
+
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (parsed !== null && typeof parsed === 'object') {
+      return { ...r, structuredContent: parsed };
+    }
+  } catch {
+    // Not valid JSON — leave the text-only result untouched.
+  }
+  return result;
 }
 
 function extractErrorMessage(result: unknown): string {

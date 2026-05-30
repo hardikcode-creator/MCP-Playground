@@ -1,0 +1,19 @@
+{
+    "mcpServers": {
+     "airbnb": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@openbnb/mcp-server-airbnb",
+        "--ignore-robots-txt"
+      ]
+    },
+      "zomato-mcp": {
+		"command": "npx",
+			"args": [
+				"mcp-remote",
+				"https://mcp-server.zomato.com/mcp"
+			]
+		}
+    }
+  }

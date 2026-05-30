@@ -160,7 +160,10 @@ export class Session {
     this.runs.set(msg.runId, { executor, abort, pauseHandler });
 
     try {
-      const result = await executor.run(workflow, { signal: abort.signal });
+      const result = await executor.run(workflow, {
+        signal: abort.signal,
+        seedResults: msg.seedResults,
+      });
       this.send({ type: 'workflowResult', runId: msg.runId, result });
     } catch (err) {
       // Thrown before any node runs (cycle / invalid dependency graph).

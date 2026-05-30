@@ -49,6 +49,9 @@ export type AppStateValue = {
   goWorkspace: () => void;
   selectTool: (qualifiedName: string) => void;
   selectWorkflowNode: (nodeId: string, qualifiedName: string) => void;
+  // Clear the Pane 3 selection — used after import/clear-canvas replaces the
+  // canvas so the inspector doesn't keep pointing at a node that no longer exists.
+  clearSelection: () => void;
   setArgsText: (text: string) => void;
   setArgMode: (mode: ArgMode) => void;
   runTool: () => Promise<void>;

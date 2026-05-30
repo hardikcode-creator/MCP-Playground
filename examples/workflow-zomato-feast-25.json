@@ -1,0 +1,230 @@
+{
+  "id": "zomato-feast-25",
+  "version": 1,
+  "name": "Zomato feast finder (25 nodes): resolve saved address, then fan-out keyword searches via $ref address_id, with breakpoints",
+  "nodes": [
+    {
+      "id": "addr",
+      "tool": "zomato-mcp__get_saved_addresses_for_user",
+      "args": {},
+      "breakpoint": true
+    },
+    {
+      "id": "pizza",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "pizza",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "burger",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "burger",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "sushi",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "sushi",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "biryani",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "biryani",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "dosa",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "masala dosa",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "chinese",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "chinese",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "italian",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "italian",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "desserts",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "desserts",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "coffee",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "cold coffee",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "rolls",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "rolls",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "thali",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "thali",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "momos",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "momos",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "shawarma",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "shawarma",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "icecream",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "ice cream",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "north_indian",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "north indian",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "south_indian",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "south indian",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "pizza_5km",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "pizza from restaurants under 5km",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "pizza_50min",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "pizza from restaurants under 50 minutes",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "quick",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "quick delivery",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "pizza_dominos",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "pizza from Dominos",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"],
+      "breakpoint": true
+    },
+    {
+      "id": "pizza_pizzahut",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "pizza from Pizza Hut",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "pizza_napoli",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "pizza from Napoli Pizzeria",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "paneer",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "paneer butter masala",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "cake",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "cake",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    }
+  ]
+}

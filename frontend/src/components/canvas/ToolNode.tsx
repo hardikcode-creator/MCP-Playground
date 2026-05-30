@@ -7,6 +7,15 @@ import { useCanvasActions } from "./canvasActions";
 
 export type ToolNodeType = Node<ToolNodeData, "tool">;
 
+// Keep canvas nodes compact: long tool descriptions are clipped to ~40 words
+// (full text stays available via the title tooltip).
+const MAX_DESC_WORDS = 40;
+function truncateWords(text: string, max: number): string {
+  const words = text.trim().split(/\s+/);
+  if (words.length <= max) return text;
+  return `${words.slice(0, max).join(" ")}…`;
+}
+
 const STATUS_STYLES: Record<NodeStatus, { border: string; bg: string; opacity: string }> = {
   idle:      { border: "border-zinc-700",    bg: "",                  opacity: "" },
   pending:   { border: "border-zinc-700",    bg: "",                  opacity: "opacity-60" },
@@ -18,6 +27,16 @@ const STATUS_STYLES: Record<NodeStatus, { border: string; bg: string; opacity: s
   skipped:   { border: "border-zinc-600",    bg: "",                  opacity: "opacity-50" },
   cycle:     { border: "border-orange-400",  bg: "bg-orange-950/30",  opacity: "" },
 };
+
+// Recycle / circular-arrow glyph for the on-node retry control.
+function RetryIcon() {
+  return (
+    <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+      <path d="M21 3v5h-5" />
+    </svg>
+  );
+}
 
 function StatusIcon({ status }: { status: NodeStatus }) {
   if (status === "running") {
@@ -96,7 +115,7 @@ function StatusIcon({ status }: { status: NodeStatus }) {
 
 export const ToolNode = memo(function ToolNode({ id, data, selected }: NodeProps<ToolNodeType>) {
   const { deleteElements } = useReactFlow();
-  const { toggleBreakpoint } = useCanvasActions();
+  const { toggleBreakpoint, retry, retryEnabled } = useCanvasActions();
   const status = data.status ?? "idle";
   const { border, bg, opacity } = STATUS_STYLES[status];
 
@@ -106,6 +125,14 @@ export const ToolNode = memo(function ToolNode({ id, data, selected }: NodeProps
       void deleteElements({ nodes: [{ id }] });
     },
     [id, deleteElements],
+  );
+
+  const onRetry = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (retryEnabled) retry();
+    },
+    [retry, retryEnabled],
   );
 
   const onToggleBreakpoint = useCallback(
@@ -149,6 +176,22 @@ export const ToolNode = memo(function ToolNode({ id, data, selected }: NodeProps
 
         <span className="ml-auto flex items-center gap-1.5">
           <StatusIcon status={status} />
+          {status === "failed" && (
+            <button
+              type="button"
+              onClick={onRetry}
+              disabled={!retryEnabled}
+              title={
+                retryEnabled
+                  ? "Retry from this node — re-runs this node and everything downstream; completed nodes keep their results"
+                  : "Fix invalid args / cycles or wait for the run to finish before retrying"
+              }
+              aria-label="Retry from this node"
+              className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-amber-600/60 bg-amber-950/50 text-amber-300 transition-all hover:border-amber-400 hover:bg-amber-900/70 hover:text-amber-100 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-transparent disabled:text-zinc-600"
+            >
+              <RetryIcon />
+            </button>
+          )}
           <button
             type="button"
             onClick={onDelete}
@@ -165,7 +208,9 @@ export const ToolNode = memo(function ToolNode({ id, data, selected }: NodeProps
 
       <div className="font-mono text-[11px] font-semibold leading-tight text-zinc-100">{data.baseName}</div>
 
-      <div className="text-[10px] leading-snug text-zinc-500">{data.description}</div>
+      <div className="text-[10px] leading-snug text-zinc-500" title={data.description}>
+        {truncateWords(data.description, MAX_DESC_WORDS)}
+      </div>
 
       <div
         className="break-all rounded border border-zinc-800 bg-zinc-950/70 px-1.5 py-1 font-mono text-[9px] text-zinc-400"

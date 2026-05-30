@@ -14,6 +14,7 @@ import { useAppState } from "../state/appState";
 import type { WorkflowState } from "../state/workflowStore";
 import { ToolNode } from "./canvas/ToolNode";
 import { DeletableEdge } from "./canvas/DeletableEdge";
+import { ImportWorkflowModal } from "./canvas/ImportWorkflowModal";
 import { CanvasActionsContext } from "./canvas/canvasActions";
 import { detectCycles } from "../lib/detectCycles";
 import { findMissingRequired } from "../lib/schema";
@@ -42,6 +43,31 @@ function StopIcon() {
   );
 }
 
+// Empty-canvas motif: a small node graph with emerald "packets" travelling
+// along its edges. Hints at what the canvas is for before any nodes exist.
+function NodeGraphMotif() {
+  return (
+    <svg width={236} height={150} viewBox="0 0 236 150" fill="none" aria-hidden="true">
+      <g className="stroke-zinc-700" strokeWidth="1.5">
+        <path d="M40 42 L118 75" />
+        <path d="M196 42 L118 75" />
+        <path d="M118 75 L118 124" />
+      </g>
+      <g className="animate-dash stroke-emerald-500/70" strokeWidth="1.6" strokeDasharray="3 9" fill="none">
+        <path d="M40 42 L118 75" />
+        <path d="M196 42 L118 75" />
+        <path d="M118 75 L118 124" />
+      </g>
+      <g strokeWidth="1.5">
+        <rect x="22" y="30" width="36" height="24" rx="6" className="fill-zinc-900 stroke-zinc-700" />
+        <rect x="178" y="30" width="36" height="24" rx="6" className="fill-zinc-900 stroke-zinc-700" />
+        <rect x="100" y="63" width="36" height="24" rx="6" className="fill-zinc-900 stroke-emerald-600" />
+        <rect x="100" y="112" width="36" height="24" rx="6" className="fill-zinc-900 stroke-zinc-700" />
+      </g>
+    </svg>
+  );
+}
+
 // Small transport indicator: shows which backend the canvas is talking to and
 // the live socket state when VITE_MCP_WS_URL is configured.
 function TransportChip({ status }: { status: TransportStatus }) {
@@ -49,7 +75,7 @@ function TransportChip({ status }: { status: TransportStatus }) {
     mock: { label: "mock", dot: "bg-zinc-500", cls: "border-zinc-700 text-zinc-500" },
     idle: { label: "backend", dot: "bg-zinc-500", cls: "border-zinc-700 text-zinc-400" },
     connecting: { label: "connecting", dot: "bg-amber-400 animate-pulse", cls: "border-amber-700/60 text-amber-300" },
-    open: { label: "backend live", dot: "bg-emerald-400", cls: "border-emerald-700/60 text-emerald-300" },
+    open: { label: "Live", dot: "bg-emerald-400", cls: "border-emerald-700/60 text-emerald-300" },
     closed: { label: "backend offline", dot: "bg-red-400", cls: "border-red-800/60 text-red-300" },
   };
   const s = map[status];
@@ -59,6 +85,60 @@ function TransportChip({ status }: { status: TransportStatus }) {
       className={`inline-flex shrink-0 items-center gap-1 rounded-full border bg-zinc-950/40 px-2 py-0.5 font-mono text-[10px] ${s.cls}`}
     >
       <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+      {s.label}
+    </span>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3v12" />
+      <path d="M8 11l4 4 4-4" />
+      <path d="M5 21h14" />
+    </svg>
+  );
+}
+
+// Run lifecycle phases shown by the status chip during/after a workflow run.
+type RunPhase = "running" | "paused" | "completed" | "failed" | "cancelled";
+
+// Combined status chip: while a run is active or just finished, it reflects the
+// run phase (animated); when idle it falls back to the transport indicator so
+// "Live"/offline/mock connectivity is never hidden.
+function StatusChip({ phase, transport }: { phase: RunPhase | null; transport: TransportStatus }) {
+  if (!phase) return <TransportChip status={transport} />;
+
+  const map: Record<RunPhase, { label: string; cls: string; title: string }> = {
+    running: { label: "Running", cls: "border-amber-600/60 bg-amber-950/30 text-amber-300", title: "Workflow is running" },
+    paused: { label: "Paused", cls: "border-amber-500/70 bg-amber-950/50 text-amber-200", title: "Paused at a breakpoint" },
+    completed: { label: "Completed", cls: "border-emerald-600/60 bg-emerald-950/40 text-emerald-300", title: "Run completed successfully" },
+    failed: { label: "Failed", cls: "border-red-800/60 bg-red-950/40 text-red-300", title: "Run finished with a failed node" },
+    cancelled: { label: "Cancelled", cls: "border-zinc-600 bg-zinc-900 text-zinc-300", title: "Run was cancelled" },
+  };
+  const s = map[phase];
+
+  return (
+    <span
+      title={s.title}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] transition-all duration-300 ${s.cls}`}
+    >
+      {phase === "running" ? (
+        <svg className="h-2.5 w-2.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round">
+          <path d="M12 3a9 9 0 1 0 9 9" />
+        </svg>
+      ) : phase === "paused" ? (
+        <span className="flex items-center gap-[2px]">
+          <span className="h-2 w-[2px] animate-pulse rounded-full bg-amber-300" />
+          <span className="h-2 w-[2px] animate-pulse rounded-full bg-amber-300" />
+        </span>
+      ) : phase === "completed" ? (
+        <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M2 6.5l2.5 2.5L10 3.2" />
+        </svg>
+      ) : (
+        <span className={`h-1.5 w-1.5 rounded-full ${phase === "failed" ? "bg-red-400" : "bg-zinc-400"}`} />
+      )}
       {s.label}
     </span>
   );
@@ -87,27 +167,34 @@ function Canvas({
   onSelectWorkflowNode: (nodeId: string, qualifiedName: string) => void;
   onOpenInspector: () => void;
 }) {
-  const { catalog, callTool } = useAppState();
+  const { catalog, callTool, clearSelection } = useAppState();
   const {
     nodes,
     edges,
     workflowRunning,
     lastRunError,
+    lastRunStatus,
+    lastRunResult,
     setCycleNodeIds,
     addNode,
     onNodesChange,
     onEdgesChange,
     onConnect,
     runWorkflow,
+    retryWorkflow,
+    canRetry,
     cancelWorkflow,
     toggleBreakpoint,
     getWorkflowJson,
+    importWorkflow,
+    clearCanvas,
   } = workflow;
-  const [copyState, setCopyState] = useState<"idle" | "ok" | "error">("idle");
+  const [exportState, setExportState] = useState<"idle" | "ok" | "error">("idle");
+  const [saveState, setSaveState] = useState<"idle" | "ok" | "error">("idle");
+  const [importOpen, setImportOpen] = useState(false);
   const [transport, setTransport] = useState<TransportStatus>("mock");
   useEffect(() => subscribeTransportStatus(setTransport), []);
-  const canvasActions = useMemo(() => ({ toggleBreakpoint }), [toggleBreakpoint]);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView } = useReactFlow();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [dismissedCycleKey, setDismissedCycleKey] = useState<string | null>(null);
   const prevCycleRef = useRef<string[]>([]);
@@ -207,18 +294,71 @@ function Canvas({
     void runWorkflow(callTool);
   }, [runWorkflow, callTool]);
 
-  const handleExport = useCallback(async () => {
+  const handleRetryWorkflow = useCallback(() => {
+    void retryWorkflow(callTool);
+  }, [retryWorkflow, callTool]);
+
+  // Download the workflow as a backend-shaped JSON file (named after its id).
+  const handleExport = useCallback(() => {
     try {
-      await navigator.clipboard.writeText(JSON.stringify(getWorkflowJson(), null, 2));
-      setCopyState("ok");
+      const wf = getWorkflowJson();
+      const blob = new Blob([JSON.stringify(wf, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${wf.id || "workflow"}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setExportState("ok");
     } catch {
-      setCopyState("error");
+      setExportState("error");
     } finally {
-      setTimeout(() => setCopyState("idle"), 1500);
+      setTimeout(() => setExportState("idle"), 1500);
     }
   }, [getWorkflowJson]);
 
+  const handleClear = useCallback(() => {
+    if (nodes.length === 0) return;
+    if (!window.confirm("Clear the workflow canvas? This removes all nodes and links.")) return;
+    clearCanvas();
+    clearSelection();
+  }, [nodes.length, clearCanvas, clearSelection]);
+
+  // Download the finished run's result (every node's resolved args + output) as
+  // a JSON file. Distinct from "Export JSON" which saves the workflow itself.
+  const handleSaveResponse = useCallback(() => {
+    if (!lastRunResult) return;
+    try {
+      const blob = new Blob([JSON.stringify(lastRunResult, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${lastRunResult.workflowId || "workflow"}-response.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setSaveState("ok");
+    } catch {
+      setSaveState("error");
+    } finally {
+      setTimeout(() => setSaveState("idle"), 1500);
+    }
+  }, [lastRunResult]);
+
   const pausedCount = useMemo(() => nodes.filter((n) => n.data.status === "paused").length, [nodes]);
+
+  // Drive the status chip: a live run shows running/paused; a finished run keeps
+  // its terminal status until the next run, clear, or import.
+  const runPhase: RunPhase | null = workflowRunning
+    ? pausedCount > 0
+      ? "paused"
+      : "running"
+    : lastRunStatus === "completed" || lastRunStatus === "failed" || lastRunStatus === "cancelled"
+      ? lastRunStatus
+      : null;
 
   // Build a human-readable cycle node name list for the banner.
   const cycleNodeNames = useMemo(() => {
@@ -244,6 +384,14 @@ function Canvas({
     return false;
   }, [nodes]);
   const showBanner = hasCycle && dismissedCycleKey !== edgeKey;
+
+  // A node-level retry is allowed when a prior run left a failure and the graph
+  // is currently runnable (not running, no cycle, no invalid args).
+  const retryEnabled = canRetry && !hasCycle && !hasInvalidArgs;
+  const canvasActions = useMemo(
+    () => ({ toggleBreakpoint, retry: handleRetryWorkflow, retryEnabled }),
+    [toggleBreakpoint, handleRetryWorkflow, retryEnabled],
+  );
 
   return (
     <CanvasActionsContext.Provider value={canvasActions}>
@@ -289,7 +437,7 @@ function Canvas({
       {/* Per-canvas toolbar strip */}
       <div className="flex items-center justify-between border-b border-zinc-800/60 bg-zinc-950 px-3 py-1.5">
         <div className="flex min-w-0 items-center gap-2">
-          <TransportChip status={transport} />
+          <StatusChip phase={runPhase} transport={transport} />
           {nodes.length > 0 && (
             <span className="font-mono text-[10px] text-zinc-600">
               {nodes.length} node{nodes.length === 1 ? "" : "s"} · {edges.length} edge{edges.length === 1 ? "" : "s"}
@@ -314,14 +462,41 @@ function Canvas({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            disabled={nodes.length === 0}
-            onClick={() => {
-              void handleExport();
-            }}
-            title="Copy this workflow as backend-shaped JSON"
+            disabled={workflowRunning}
+            onClick={() => setImportOpen(true)}
+            title="Import a saved workflow JSON onto the canvas"
             className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-all hover:border-zinc-500 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:border-zinc-800 disabled:text-zinc-600"
           >
-            {copyState === "ok" ? "Copied JSON" : copyState === "error" ? "Copy failed" : "Export JSON"}
+            Import JSON
+          </button>
+          <button
+            type="button"
+            disabled={nodes.length === 0}
+            onClick={handleExport}
+            title="Download this workflow as a backend-shaped JSON file"
+            className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-all hover:border-zinc-500 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:border-zinc-800 disabled:text-zinc-600"
+          >
+            {exportState === "ok" ? "Saved" : exportState === "error" ? "Export failed" : "Export JSON"}
+          </button>
+          {lastRunResult && !workflowRunning && (
+            <button
+              type="button"
+              onClick={handleSaveResponse}
+              title="Download the run result — every node's resolved args and output — as JSON"
+              className="flex items-center gap-1.5 rounded-md border border-emerald-700/50 bg-emerald-950/30 px-2.5 py-1 text-xs font-medium text-emerald-300 transition-all hover:border-emerald-500 hover:bg-emerald-900/50 hover:text-emerald-200"
+            >
+              <DownloadIcon />
+              {saveState === "ok" ? "Saved" : saveState === "error" ? "Save failed" : "Save response"}
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={nodes.length === 0 || workflowRunning}
+            onClick={handleClear}
+            title="Remove all nodes and links from the canvas"
+            className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-all hover:border-red-600/70 hover:bg-red-950/30 hover:text-red-300 disabled:cursor-not-allowed disabled:border-zinc-800 disabled:text-zinc-600 disabled:hover:bg-transparent"
+          >
+            Clear
           </button>
           {workflowRunning ? (
             <button
@@ -375,17 +550,38 @@ function Canvas({
 
         {nodes.length === 0 && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-2 text-center">
-              <p className="text-sm text-zinc-500">
-                Drag tools from the catalog onto the canvas.
-              </p>
-              <p className="font-mono text-xs text-zinc-600">
-                Connect nodes · press Run Workflow to execute.
-              </p>
+            <div className="flex flex-col items-center gap-5 text-center">
+              <div className="animate-float opacity-90">
+                <NodeGraphMotif />
+              </div>
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-zinc-500">
+                  Drag tools from the catalog onto the canvas.
+                </p>
+                <p className="font-mono text-xs text-zinc-600">
+                  Connect nodes · press Run Workflow to execute — or Import JSON.
+                </p>
+              </div>
             </div>
           </div>
         )}
       </div>
+
+      {importOpen && (
+        <ImportWorkflowModal
+          catalog={catalog}
+          hasExisting={nodes.length > 0}
+          onImport={(ns, es) => {
+            importWorkflow(ns, es);
+            // The previous selection may point at a node that no longer exists;
+            // reset Pane 3 so every pane reflects the imported workflow.
+            clearSelection();
+            // Frame the imported graph once it has rendered.
+            setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 0);
+          }}
+          onClose={() => setImportOpen(false)}
+        />
+      )}
     </CanvasActionsContext.Provider>
   );
 }

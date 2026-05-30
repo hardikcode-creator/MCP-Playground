@@ -39,7 +39,7 @@ const WS_URL = `ws://localhost:${WS_PORT}`;
 const tsxBin = path.join(backendDir, "node_modules", ".bin", "tsx");
 const stubPath = path.join(backendDir, "test", "fixtures", "stub-mcp-server.ts");
 const stubConfig = {
-  servers: [{ name: "everything", command: tsxBin, args: [stubPath] }],
+  mcpServers: { everything: { command: tsxBin, args: [stubPath] } },
 };
 
 const children = [];
@@ -164,13 +164,13 @@ async function main() {
     await clickByText(page, "button", "Open Workspace");
 
     // Connect round-trip: socket open + real catalog from the spawned stub.
-    await page.waitForFunction(() => document.body.innerText.includes("backend live"), {
+    await page.waitForFunction(() => document.body.innerText.includes("Live"), {
       timeout: 20_000,
     });
     await page.waitForFunction(() => /\becho\b/.test(document.body.innerText), {
       timeout: 20_000,
     });
-    console.log('PASS: connected over WS; transport "backend live"; catalog lists echo');
+    console.log('PASS: connected over WS; transport "Live"; catalog lists echo');
 
     // Run the echo tool over the socket and read the real result envelope.
     await clickByText(page, "button", "echo");

@@ -100,6 +100,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setInspectorSource("workflow");
   }, []);
 
+  const clearSelection = useCallback(() => {
+    setSelectedTool(null);
+    setSelectedWorkflowNodeId(null);
+    setInspectorSource(null);
+    setArgsText("");
+    setRunning(false);
+  }, []);
+
   const callTool = useCallback(
     async (
       qualifiedName: string,
@@ -207,6 +215,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       goWorkspace,
       selectTool,
       selectWorkflowNode,
+      clearSelection,
       setArgsText,
       setArgMode,
       runTool,
@@ -239,6 +248,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       goWorkspace,
       selectTool,
       selectWorkflowNode,
+      clearSelection,
       runTool,
       callTool,
     ],

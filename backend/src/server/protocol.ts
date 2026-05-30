@@ -23,7 +23,7 @@ export const PROTOCOL_VERSION = 1;
 export type ClientMessage =
   | { type: 'connect'; id: string; config: PlaygroundConfig; providedEnv?: ProvidedEnv }
   | { type: 'callTool'; id: string; qualifiedName: string; args: Record<string, unknown> }
-  | { type: 'runWorkflow'; runId: string; workflow: Workflow }
+  | { type: 'runWorkflow'; runId: string; workflow: Workflow; seedResults?: Record<string, unknown> }
   | { type: 'pauseAction'; runId: string; nodeId: string; action: PauseAction }
   | { type: 'cancel'; runId: string }
   | { type: 'setBreakpoint'; runId: string; nodeId: string }

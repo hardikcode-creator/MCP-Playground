@@ -156,11 +156,12 @@ export class WsConnection {
     runId: string,
     workflow: Workflow,
     onEvent: (event: EngineEvent) => void,
+    seedResults?: Record<string, unknown>,
   ): Promise<WorkflowRunResult> {
     await this.ensureOpen();
     return new Promise<WorkflowRunResult>((resolve, reject) => {
       this.byRun.set(runId, { onEvent, resolve, reject });
-      const frame: ClientMessage = { type: "runWorkflow", runId, workflow };
+      const frame: ClientMessage = { type: "runWorkflow", runId, workflow, seedResults };
       this.socket!.send(JSON.stringify(frame));
     });
   }
