@@ -18,6 +18,8 @@ import { CanvasActionsContext } from "./canvas/canvasActions";
 import { detectCycles } from "../lib/detectCycles";
 import { findMissingRequired } from "../lib/schema";
 import { collectValueRefNodeIds } from "../lib/workflowRefs";
+import { subscribeTransportStatus } from "../data/mcpClient";
+import type { TransportStatus } from "../data/mcpClient";
 
 const NODE_TYPES: NodeTypes = { tool: ToolNode as NodeTypes[string] };
 const EDGE_TYPES: EdgeTypes = { deletable: DeletableEdge as EdgeTypes[string] };
@@ -37,6 +39,28 @@ function StopIcon() {
     <svg width={10} height={10} viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
       <rect x="1.5" y="1.5" width="9" height="9" rx="1.5" />
     </svg>
+  );
+}
+
+// Small transport indicator: shows which backend the canvas is talking to and
+// the live socket state when VITE_MCP_WS_URL is configured.
+function TransportChip({ status }: { status: TransportStatus }) {
+  const map: Record<TransportStatus, { label: string; dot: string; cls: string }> = {
+    mock: { label: "mock", dot: "bg-zinc-500", cls: "border-zinc-700 text-zinc-500" },
+    idle: { label: "backend", dot: "bg-zinc-500", cls: "border-zinc-700 text-zinc-400" },
+    connecting: { label: "connecting", dot: "bg-amber-400 animate-pulse", cls: "border-amber-700/60 text-amber-300" },
+    open: { label: "backend live", dot: "bg-emerald-400", cls: "border-emerald-700/60 text-emerald-300" },
+    closed: { label: "backend offline", dot: "bg-red-400", cls: "border-red-800/60 text-red-300" },
+  };
+  const s = map[status];
+  return (
+    <span
+      title={status === "mock" ? "In-browser mock client (no backend)" : `WebSocket backend: ${status}`}
+      className={`inline-flex shrink-0 items-center gap-1 rounded-full border bg-zinc-950/40 px-2 py-0.5 font-mono text-[10px] ${s.cls}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+      {s.label}
+    </span>
   );
 }
 
@@ -68,6 +92,7 @@ function Canvas({
     nodes,
     edges,
     workflowRunning,
+    lastRunError,
     setCycleNodeIds,
     addNode,
     onNodesChange,
@@ -79,6 +104,8 @@ function Canvas({
     getWorkflowJson,
   } = workflow;
   const [copyState, setCopyState] = useState<"idle" | "ok" | "error">("idle");
+  const [transport, setTransport] = useState<TransportStatus>("mock");
+  useEffect(() => subscribeTransportStatus(setTransport), []);
   const canvasActions = useMemo(() => ({ toggleBreakpoint }), [toggleBreakpoint]);
   const { screenToFlowPosition } = useReactFlow();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -261,7 +288,8 @@ function Canvas({
 
       {/* Per-canvas toolbar strip */}
       <div className="flex items-center justify-between border-b border-zinc-800/60 bg-zinc-950 px-3 py-1.5">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <TransportChip status={transport} />
           {nodes.length > 0 && (
             <span className="font-mono text-[10px] text-zinc-600">
               {nodes.length} node{nodes.length === 1 ? "" : "s"} · {edges.length} edge{edges.length === 1 ? "" : "s"}
@@ -271,6 +299,15 @@ function Canvas({
             <span className="inline-flex items-center gap-1 rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-0.5 font-mono text-[10px] text-amber-300">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
               paused ({pausedCount})
+            </span>
+          )}
+          {lastRunError && !workflowRunning && (
+            <span
+              title={lastRunError}
+              className="inline-flex min-w-0 items-center gap-1 rounded-full border border-red-800/60 bg-red-950/40 px-2 py-0.5 font-mono text-[10px] text-red-300"
+            >
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" />
+              <span className="truncate max-w-[260px]">run failed: {lastRunError}</span>
             </span>
           )}
         </div>

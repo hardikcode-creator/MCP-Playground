@@ -15,7 +15,7 @@ import type {
 import type { NodeStatus, ToolDescriptor, ToolResult } from "../types";
 import { seedArgs } from "../lib/schema";
 import { serializeWorkflow } from "../lib/workflow/serialize";
-import { LocalWorkflowRunner } from "../data/mcpClient";
+import { createWorkflowRunner } from "../data/mcpClient";
 import type { CallToolFn } from "../data/mcpClient";
 import type { PauseHandler } from "../lib/workflow/executor";
 import type { EngineEvent, PauseAction, Workflow } from "../lib/workflow/types";
@@ -39,6 +39,9 @@ export type WorkflowState = {
   edges: Edge[];
   workflowRunning: boolean;
   cycleNodeIds: string[];
+  // Run-level error surfaced from the runner: backend validation/cycle rejects
+  // (server `error` frame) or a dropped socket. Null while healthy.
+  lastRunError: string | null;
   addNode: (tool: ToolDescriptor, position: { x: number; y: number }) => void;
   onNodesChange: OnNodesChange<Node<ToolNodeData>>;
   onEdgesChange: OnEdgesChange;
@@ -69,6 +72,7 @@ export function useWorkflowStore(): WorkflowState {
   const [edges, setEdges] = useState<Edge[]>([]);
   const [workflowRunning, setWorkflowRunning] = useState(false);
   const [cycleNodeIds, setCycleNodeIdsState] = useState<string[]>([]);
+  const [lastRunError, setLastRunError] = useState<string | null>(null);
   const nodeIdCounterByToolRef = useRef<Record<string, number>>({});
 
   // Mirrors of the latest state, read inside callbacks/event handlers (which
@@ -231,6 +235,7 @@ export function useWorkflowStore(): WorkflowState {
       if (workflow.nodes.length === 0) return;
 
       resetStatuses();
+      setLastRunError(null);
       pendingPausesRef.current.clear();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -247,12 +252,15 @@ export function useWorkflowStore(): WorkflowState {
           }),
       };
 
-      const runner = new LocalWorkflowRunner(callTool);
+      const runner = createWorkflowRunner(callTool);
       try {
         await runner.run(workflow, { onEvent: handleEngineEvent, pauseHandler, signal: controller.signal });
       } catch (err) {
-        // Validation / cycle errors throw before any node runs.
-        console.error("[workflow] run failed:", (err as Error).message);
+        // Validation / cycle errors (local or from the backend `error` frame),
+        // or a dropped socket — surface to the canvas instead of only logging.
+        const message = (err as Error).message;
+        console.error("[workflow] run failed:", message);
+        setLastRunError(message);
       } finally {
         setWorkflowRunning(false);
         abortRef.current = null;
@@ -319,6 +327,7 @@ export function useWorkflowStore(): WorkflowState {
     edges,
     workflowRunning,
     cycleNodeIds,
+    lastRunError,
     addNode,
     onNodesChange,
     onEdgesChange,

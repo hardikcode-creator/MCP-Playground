@@ -7,9 +7,32 @@ import type { ConnectResult, PlaygroundConfig, ToolResult } from "../types";
 import { MockMcpClient } from "./mockMcpClient";
 import { WorkflowExecutor } from "../lib/workflow/executor";
 import type { PauseHandler, ToolCaller } from "../lib/workflow/executor";
-import type { EngineEvent, Workflow, WorkflowRunResult } from "../lib/workflow/types";
+import type { BreakpointContext, EngineEvent, Workflow, WorkflowRunResult } from "../lib/workflow/types";
+import { getSharedConnection } from "./wsConnection";
+import type { WsConnection, WsStatus } from "./wsConnection";
 
 export type CallToolOptions = { signal?: AbortSignal };
+
+// Transport switch: set VITE_MCP_WS_URL (e.g. ws://localhost:8787) to drive the
+// real backend; leave it unset to use the in-browser mock. Empty string counts
+// as unset so a blank .env line doesn't accidentally force the socket.
+const WS_URL: string | undefined =
+  (import.meta.env.VITE_MCP_WS_URL as string | undefined) || undefined;
+
+// "mock" when no backend is configured; otherwise the live socket status.
+export type TransportStatus = "mock" | WsStatus;
+
+// Subscribe to the active transport's status. No-op (always "mock") when
+// VITE_MCP_WS_URL is unset, so UI can render a single indicator either way.
+export function subscribeTransportStatus(
+  listener: (status: TransportStatus) => void,
+): () => void {
+  if (!WS_URL) {
+    listener("mock");
+    return () => {};
+  }
+  return getSharedConnection(WS_URL).onStatus(listener);
+}
 
 export interface McpClient {
   // Upload-time handshake: send the config, get the tool catalog back.
@@ -19,30 +42,46 @@ export interface McpClient {
   callTool(qualifiedName: string, args: Record<string, unknown>, options?: CallToolOptions): Promise<ToolResult>;
 }
 
-// now:   createMcpClient() -> new MockMcpClient()
-// later: createMcpClient() -> new WebSocketMcpClient(import.meta.env.VITE_MCP_WS_URL)
+// Mock by default; real socket when VITE_MCP_WS_URL is set. Both sides of the
+// app depend only on the McpClient interface, so this is the single switch.
 export function createMcpClient(): McpClient {
+  if (WS_URL) return new WebSocketMcpClient(getSharedConnection(WS_URL));
   return new MockMcpClient();
 }
 
-// Stub for the future transport. Protocol sketch over a single socket (JSON):
-//   -> { id, type: "connect",  config }
-//   <- { id, type: "connected", catalog, skipped, failed }
-//   -> { id, type: "callTool", qualifiedName, args }
-//   <- { id, type: "toolResult", result } | { id, type: "error", error }
+// Real transport over a single shared socket. Protocol (JSON frames):
+//   -> { type: "connect",  id, config }
+//   <- { type: "connected", id, catalog, skipped, failed }
+//   -> { type: "callTool", id, qualifiedName, args }
+//   <- { type: "toolResult", id, result } | { type: "error", id, error }
 export class WebSocketMcpClient implements McpClient {
-  private readonly url: string;
+  private readonly conn: WsConnection;
 
-  constructor(url: string) {
-    this.url = url;
+  constructor(conn: WsConnection) {
+    this.conn = conn;
   }
 
-  async connect(): Promise<ConnectResult> {
-    throw new Error(`WebSocketMcpClient(${this.url}) is not implemented yet`);
+  async connect(config: PlaygroundConfig): Promise<ConnectResult> {
+    const id = this.conn.nextId("connect");
+    const res = await this.conn.request({ type: "connect", id, config });
+    if (res.type !== "connected") {
+      throw new Error(`Unexpected ${res.type} reply to connect`);
+    }
+    return { catalog: res.catalog, skipped: res.skipped, failed: res.failed };
   }
 
-  async callTool(): Promise<ToolResult> {
-    throw new Error(`WebSocketMcpClient(${this.url}) is not implemented yet`);
+  // The single-tool path (Pane 3) has no cross-socket cancel in this protocol,
+  // so the optional CallToolOptions.signal is intentionally not implemented here.
+  async callTool(
+    qualifiedName: string,
+    args: Record<string, unknown>,
+  ): Promise<ToolResult> {
+    const id = this.conn.nextId("call");
+    const res = await this.conn.request({ type: "callTool", id, qualifiedName, args });
+    if (res.type !== "toolResult") {
+      throw new Error(`Unexpected ${res.type} reply to callTool`);
+    }
+    return res.result as ToolResult;
   }
 }
 
@@ -87,22 +126,59 @@ export class LocalWorkflowRunner implements WorkflowRunner {
   }
 }
 
-// later: serialize the Workflow, send it over the socket, and translate the
-// streamed { type: "engineEvent", event } / pause-request frames into the same
-// EngineEvent callbacks + PauseHandler protocol used here — so the canvas and
-// inspector code stay identical when the transport flips.
+// Ships the serialized Workflow to the backend executor and translates the
+// streamed frames back into the SAME WorkflowRunOptions the local runner uses,
+// so the canvas/inspector/store stay byte-identical across the transport flip:
+//   - engineEvent frames -> onEvent(event)
+//   - a node.paused event -> ask the local pauseHandler, then send pauseAction
+//   - an aborted signal   -> send a cancel frame
 export class WebSocketWorkflowRunner implements WorkflowRunner {
-  private readonly url: string;
+  private readonly conn: WsConnection;
 
-  constructor(url: string) {
-    this.url = url;
+  constructor(conn: WsConnection) {
+    this.conn = conn;
   }
 
-  async run(): Promise<WorkflowRunResult> {
-    throw new Error(`WebSocketWorkflowRunner(${this.url}) is not implemented yet`);
+  async run(
+    workflow: Workflow,
+    { onEvent, pauseHandler, signal }: WorkflowRunOptions,
+  ): Promise<WorkflowRunResult> {
+    const runId = this.conn.nextId("run");
+
+    const onAbort = () => this.conn.send({ type: "cancel", runId });
+    if (signal) {
+      if (signal.aborted) this.conn.send({ type: "cancel", runId });
+      else signal.addEventListener("abort", onAbort, { once: true });
+    }
+
+    const handleEvent = (event: EngineEvent) => {
+      onEvent(event);
+      if (event.type === "node.paused") {
+        // The local pause handler is the source of user intent (Resume / Skip /
+        // continue-with-args); ferry its resolution back to the executor.
+        const ctx: BreakpointContext = {
+          nodeId: event.nodeId,
+          tool: "",
+          source: event.source,
+          args: event.args,
+        };
+        void Promise.resolve(pauseHandler.onBreakpoint(ctx, signal)).then((action) => {
+          this.conn.send({ type: "pauseAction", runId, nodeId: event.nodeId, action });
+        });
+      }
+    };
+
+    try {
+      return await this.conn.runWorkflow(runId, workflow, handleEvent);
+    } finally {
+      if (signal) signal.removeEventListener("abort", onAbort);
+    }
   }
 }
 
+// Local (ported executor + mock callTool) unless VITE_MCP_WS_URL points at a
+// backend, in which case the run happens server-side over the shared socket.
 export function createWorkflowRunner(callTool: CallToolFn): WorkflowRunner {
+  if (WS_URL) return new WebSocketWorkflowRunner(getSharedConnection(WS_URL));
   return new LocalWorkflowRunner(callTool);
 }
