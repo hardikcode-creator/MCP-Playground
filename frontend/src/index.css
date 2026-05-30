@@ -38,7 +38,7 @@ body {
 @layer components {
   .btn-primary {
     @apply relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-xl px-4 py-2.5 text-sm font-semibold text-emerald-950 shadow-lg shadow-emerald-900/40 transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.03] hover:brightness-110 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none disabled:hover:translate-y-0 disabled:hover:scale-100 disabled:hover:brightness-100;
-    background-image: linear-gradient(120deg, var(--color-emerald-500), var(--color-emerald-400), var(--color-cyan-400));
+    background-image: linear-gradient(120deg, var(--color-emerald-500), var(--color-emerald-400), var(--color-emerald-300));
     background-size: 200% 200%;
     animation: shimmer 6s ease infinite;
     transition-timing-function: var(--ease-spring);
@@ -51,8 +51,9 @@ body {
 
   .text-grad {
     @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(120deg, var(--color-emerald-300), var(--color-cyan-300), var(--color-lime-200));
+    background-image: linear-gradient(120deg, var(--color-emerald-400), var(--color-emerald-300), var(--color-emerald-200));
   }
+
 }
 
 @keyframes rise {
