@@ -11,10 +11,11 @@ import {
 import type { EdgeTypes, NodeTypes } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useAppState } from "../state/appState";
-import { useWorkflowStore } from "../state/workflowStore";
+import type { WorkflowState } from "../state/workflowStore";
 import { ToolNode } from "./canvas/ToolNode";
 import { DeletableEdge } from "./canvas/DeletableEdge";
 import { detectCycles } from "../lib/detectCycles";
+import { findMissingRequired } from "../lib/schema";
 
 const NODE_TYPES: NodeTypes = { tool: ToolNode as NodeTypes[string] };
 const EDGE_TYPES: EdgeTypes = { deletable: DeletableEdge as EdgeTypes[string] };
@@ -29,7 +30,15 @@ function PlayIcon() {
   );
 }
 
-function Canvas() {
+function Canvas({
+  workflow,
+  onSelectWorkflowNode,
+  onOpenInspector,
+}: {
+  workflow: WorkflowState;
+  onSelectWorkflowNode: (nodeId: string, qualifiedName: string) => void;
+  onOpenInspector: () => void;
+}) {
   const { catalog, callTool } = useAppState();
   const {
     nodes,
@@ -42,10 +51,10 @@ function Canvas() {
     onConnect,
     resetStatuses,
     runWorkflow,
-  } = useWorkflowStore();
+  } = workflow;
   const { screenToFlowPosition } = useReactFlow();
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [dismissedCycleKey, setDismissedCycleKey] = useState<string | null>(null);
   const prevCycleRef = useRef<string[]>([]);
 
   // Derive cycle ids from graph structure only (node ids + edges).
@@ -75,7 +84,6 @@ function Canvas() {
     if (!changed) return;
     prevCycleRef.current = cycleIds;
     setCycleNodeIds(cycleIds);
-    if (cycleIds.length === 0) setBannerDismissed(false);
   }, [cycleIds, setCycleNodeIds]);
 
   // Edges whose source node is currently running get animated flowing dashes.
@@ -122,7 +130,20 @@ function Canvas() {
   }, [cycleIds, nodes]);
 
   const hasCycle = cycleIds.length > 0;
-  const showBanner = hasCycle && !bannerDismissed;
+  const hasInvalidArgs = useMemo(() => {
+    for (const n of nodes) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(n.data.argsText || "{}");
+      } catch {
+        return true;
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return true;
+      if (findMissingRequired(n.data.inputSchema, parsed as Record<string, unknown>).length > 0) return true;
+    }
+    return false;
+  }, [nodes]);
+  const showBanner = hasCycle && dismissedCycleKey !== edgeKey;
 
   return (
     <>
@@ -154,7 +175,7 @@ function Canvas() {
           </div>
           <button
             type="button"
-            onClick={() => setBannerDismissed(true)}
+            onClick={() => setDismissedCycleKey(edgeKey)}
             aria-label="Dismiss warning"
             className="mt-px shrink-0 text-orange-500 hover:text-orange-300"
           >
@@ -176,9 +197,9 @@ function Canvas() {
         </div>
         <button
           type="button"
-          disabled={nodes.length === 0 || workflowRunning || hasCycle}
+          disabled={nodes.length === 0 || workflowRunning || hasCycle || hasInvalidArgs}
           onClick={handleRunWorkflow}
-          title={hasCycle ? "Resolve cycle before running" : undefined}
+          title={hasCycle ? "Resolve cycle before running" : hasInvalidArgs ? "Fix invalid node args before running" : undefined}
           className="flex items-center gap-1.5 rounded-md border border-emerald-700/60 bg-emerald-900/40 px-2.5 py-1 text-xs font-medium text-emerald-300 transition-all hover:border-emerald-500 hover:bg-emerald-900/70 hover:text-emerald-200 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-transparent disabled:text-zinc-600"
         >
           <PlayIcon />
@@ -193,6 +214,10 @@ function Canvas() {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onNodeClick={(_, node) => {
+            onSelectWorkflowNode(node.id, node.data.qualifiedName);
+            onOpenInspector();
+          }}
           nodeTypes={NODE_TYPES}
           edgeTypes={EDGE_TYPES}
           defaultViewport={{ x: 0, y: 0, zoom: 0.75 }}
@@ -224,7 +249,15 @@ function Canvas() {
   );
 }
 
-export function WorkflowCanvasPane() {
+export function WorkflowCanvasPane({
+  workflow,
+  onSelectWorkflowNode,
+  onOpenInspector,
+}: {
+  workflow: WorkflowState;
+  onSelectWorkflowNode: (nodeId: string, qualifiedName: string) => void;
+  onOpenInspector: () => void;
+}) {
   return (
     <section className="relative flex h-full flex-col bg-zinc-950">
       <header className="flex items-center justify-between border-b border-zinc-800 px-3 py-2">
@@ -238,7 +271,11 @@ export function WorkflowCanvasPane() {
 
       <div className="relative flex min-h-0 flex-1 flex-col">
         <ReactFlowProvider>
-          <Canvas />
+          <Canvas
+            workflow={workflow}
+            onSelectWorkflowNode={onSelectWorkflowNode}
+            onOpenInspector={onOpenInspector}
+          />
         </ReactFlowProvider>
       </div>
     </section>

@@ -22,6 +22,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [failed, setFailed] = useState<AppStateValue["failed"]>([]);
 
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
+  const [selectedWorkflowNodeId, setSelectedWorkflowNodeId] = useState<string | null>(null);
+  const [inspectorSource, setInspectorSource] = useState<"catalog" | "workflow" | null>(null);
   const [argsText, setArgsText] = useState("");
   const [argMode, setArgMode] = useState<ArgMode>("params");
 
@@ -63,6 +65,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setSkipped([]);
     setFailed([]);
     setSelectedTool(null);
+    setSelectedWorkflowNodeId(null);
+    setInspectorSource(null);
     setArgsText("");
     setRuns([]);
     setRunning(false);
@@ -82,11 +86,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     (qualifiedName: string) => {
       const tool = catalog.find((t) => t.qualifiedName === qualifiedName) ?? null;
       setSelectedTool(qualifiedName);
+      setSelectedWorkflowNodeId(null);
+      setInspectorSource("catalog");
       setArgsText(tool ? seedArgs(tool.inputSchema) : "{}");
       setRunning(false);
     },
     [catalog],
   );
+
+  const selectWorkflowNode = useCallback((nodeId: string, qualifiedName: string) => {
+    setSelectedWorkflowNodeId(nodeId);
+    setSelectedTool(qualifiedName);
+    setInspectorSource("workflow");
+  }, []);
 
   const callTool = useCallback(
     async (qualifiedName: string, args: Record<string, unknown>): Promise<ToolResult> => {
@@ -163,7 +175,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       skipped,
       failed,
       connectedCount,
+      inspectorSource,
       selectedTool,
+      selectedWorkflowNodeId,
       selectedDescriptor,
       argsText,
       argMode,
@@ -177,6 +191,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       goHome,
       goWorkspace,
       selectTool,
+      selectWorkflowNode,
       setArgsText,
       setArgMode,
       runTool,
@@ -192,7 +207,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       skipped,
       failed,
       connectedCount,
+      inspectorSource,
       selectedTool,
+      selectedWorkflowNodeId,
       selectedDescriptor,
       argsText,
       argMode,
@@ -205,6 +222,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       goHome,
       goWorkspace,
       selectTool,
+      selectWorkflowNode,
       runTool,
       callTool,
     ],

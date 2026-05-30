@@ -24,7 +24,9 @@ export type AppStateValue = {
   connectedCount: number;
 
   // selection + args (Pane 3)
+  inspectorSource: "catalog" | "workflow" | null;
   selectedTool: string | null;
+  selectedWorkflowNodeId: string | null;
   selectedDescriptor: ToolDescriptor | null;
   argsText: string;
   argMode: ArgMode;
@@ -42,6 +44,7 @@ export type AppStateValue = {
   goHome: () => void;
   goWorkspace: () => void;
   selectTool: (qualifiedName: string) => void;
+  selectWorkflowNode: (nodeId: string, qualifiedName: string) => void;
   setArgsText: (text: string) => void;
   setArgMode: (mode: ArgMode) => void;
   runTool: () => Promise<void>;

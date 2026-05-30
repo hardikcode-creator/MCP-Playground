@@ -13,12 +13,17 @@ import type {
   Connection,
 } from "@xyflow/react";
 import type { NodeStatus, ToolDescriptor, ToolResult } from "../types";
+import { seedArgs, findMissingRequired } from "../lib/schema";
+import { resolveValueRefs } from "../lib/workflowRefs";
 
 export type ToolNodeData = {
   qualifiedName: string;
   baseName: string;
   serverName: string;
   description: string;
+  inputSchema: ToolDescriptor["inputSchema"];
+  argsText: string;
+  lastResult: ToolResult | null;
   status: NodeStatus;
 };
 
@@ -38,6 +43,9 @@ export type WorkflowState = {
   onConnect: OnConnect;
   clearCanvas: () => void;
   setNodeStatus: (nodeId: string, status: NodeStatus) => void;
+  setNodeArgsText: (nodeId: string, argsText: string) => void;
+  getNodeById: (nodeId: string) => Node<ToolNodeData> | undefined;
+  getNodeOutputById: (nodeId: string) => unknown;
   setCycleNodeIds: (ids: string[]) => void;
   resetStatuses: () => void;
   runWorkflow: (callTool: CallToolFn) => Promise<void>;
@@ -46,6 +54,7 @@ export type WorkflowState = {
 export function useWorkflowStore(): WorkflowState {
   const [nodes, setNodes] = useState<Node<ToolNodeData>[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
+  const [nodeOutputs, setNodeOutputs] = useState<Record<string, unknown>>({});
   const [workflowRunning, setWorkflowRunning] = useState(false);
   const [cycleNodeIds, setCycleNodeIdsState] = useState<string[]>([]);
 
@@ -59,6 +68,9 @@ export function useWorkflowStore(): WorkflowState {
         baseName: tool.baseName,
         serverName: tool.serverName,
         description: tool.description,
+        inputSchema: tool.inputSchema,
+        argsText: seedArgs(tool.inputSchema),
+        lastResult: null,
         status: "idle",
       },
     };
@@ -83,6 +95,7 @@ export function useWorkflowStore(): WorkflowState {
   const clearCanvas = useCallback(() => {
     setNodes([]);
     setEdges([]);
+    setNodeOutputs({});
   }, []);
 
   const setNodeStatus = useCallback((nodeId: string, status: NodeStatus) => {
@@ -92,6 +105,24 @@ export function useWorkflowStore(): WorkflowState {
       ),
     );
   }, []);
+
+  const setNodeArgsText = useCallback((nodeId: string, argsText: string) => {
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.id === nodeId ? { ...n, data: { ...n.data, argsText } } : n,
+      ),
+    );
+  }, []);
+
+  const getNodeById = useCallback(
+    (nodeId: string) => nodes.find((n) => n.id === nodeId),
+    [nodes],
+  );
+
+  const getNodeOutputById = useCallback(
+    (nodeId: string) => nodeOutputs[nodeId],
+    [nodeOutputs],
+  );
 
   const setCycleNodeIds = useCallback((ids: string[]) => {
     setCycleNodeIdsState(ids);
@@ -113,10 +144,29 @@ export function useWorkflowStore(): WorkflowState {
 
   const resetStatuses = useCallback(() => {
     setCycleNodeIdsState([]);
+    setNodeOutputs({});
     setNodes((nds) =>
-      nds.map((n) => ({ ...n, data: { ...n.data, status: "idle" as NodeStatus } })),
+      nds.map((n) => ({
+        ...n,
+        data: { ...n.data, status: "idle" as NodeStatus, lastResult: null },
+      })),
     );
   }, []);
+
+  const resultToOutput = (result: ToolResult): unknown => {
+    if (result.structuredContent !== undefined) return result.structuredContent;
+    const textPart = result.content?.find((c) => c.type === "text" && typeof c.text === "string") as
+      | { type: "text"; text: string }
+      | undefined;
+    if (textPart) {
+      try {
+        return JSON.parse(textPart.text);
+      } catch {
+        return textPart.text;
+      }
+    }
+    return result;
+  };
 
   const runWorkflow = useCallback(
     async (callTool: CallToolFn) => {
@@ -149,9 +199,39 @@ export function useWorkflowStore(): WorkflowState {
 
       // Track completed statuses so downstream nodes can check them.
       const finalStatus = new Map<string, NodeStatus>();
-
+      const finalOutputs: Record<string, unknown> = {};
       // Process waves until all nodes are resolved.
       const resolved = new Set<string>();
+
+      // Preflight parse + required-field validation.
+      const validatedArgs = new Map<string, Record<string, unknown>>();
+      for (const n of snapNodes) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(n.data.argsText || "{}");
+        } catch {
+          finalStatus.set(n.id, "error");
+          resolved.add(n.id);
+          setNodeStatus(n.id, "error");
+          continue;
+        }
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          finalStatus.set(n.id, "error");
+          resolved.add(n.id);
+          setNodeStatus(n.id, "error");
+          continue;
+        }
+        const missing = findMissingRequired(n.data.inputSchema, parsed as Record<string, unknown>);
+        if (missing.length > 0) {
+          finalStatus.set(n.id, "error");
+          resolved.add(n.id);
+          setNodeStatus(n.id, "error");
+          continue;
+        }
+        validatedArgs.set(n.id, parsed as Record<string, unknown>);
+      }
+
+      for (const id of finalStatus.keys()) resolved.add(id);
 
       const isReady = (nodeId: string): boolean => {
         const preds = predecessors.get(nodeId) ?? new Set();
@@ -196,10 +276,31 @@ export function useWorkflowStore(): WorkflowState {
 
             setNodeStatus(nodeId, "running");
             try {
-              const result = await callTool(node.data.qualifiedName, {});
+              const rawArgs = validatedArgs.get(nodeId) ?? {};
+              const resolvedArgsResult = resolveValueRefs(
+                rawArgs,
+                (refNodeId) => finalOutputs[refNodeId],
+              );
+              if (resolvedArgsResult.errors.length > 0) {
+                setNodeStatus(nodeId, "error");
+                finalStatus.set(nodeId, "error");
+                resolved.add(nodeId);
+                return;
+              }
+              const result = await callTool(
+                node.data.qualifiedName,
+                resolvedArgsResult.value as Record<string, unknown>,
+              );
               const status: NodeStatus = result.isError ? "error" : "success";
               setNodeStatus(nodeId, status);
               finalStatus.set(nodeId, status);
+              finalOutputs[nodeId] = resultToOutput(result);
+              setNodeOutputs((prev) => ({ ...prev, [nodeId]: finalOutputs[nodeId] }));
+              setNodes((nds) =>
+                nds.map((n) =>
+                  n.id === nodeId ? { ...n, data: { ...n.data, lastResult: result } } : n,
+                ),
+              );
             } catch {
               setNodeStatus(nodeId, "error");
               finalStatus.set(nodeId, "error");
@@ -228,6 +329,9 @@ export function useWorkflowStore(): WorkflowState {
     onConnect,
     clearCanvas,
     setNodeStatus,
+    setNodeArgsText,
+    getNodeById,
+    getNodeOutputById,
     setCycleNodeIds,
     resetStatuses,
     runWorkflow,
