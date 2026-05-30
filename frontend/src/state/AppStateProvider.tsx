@@ -101,8 +101,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const callTool = useCallback(
-    async (qualifiedName: string, args: Record<string, unknown>): Promise<ToolResult> => {
-      return clientRef.current.callTool(qualifiedName, args);
+    async (
+      qualifiedName: string,
+      args: Record<string, unknown>,
+      options?: { signal?: AbortSignal },
+    ): Promise<ToolResult> => {
+      return clientRef.current.callTool(qualifiedName, args, options);
     },
     [],
   );
@@ -159,6 +163,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     return null;
   }, [runs, selectedTool]);
 
+  const getToolResult = useCallback(
+    (qualifiedName: string): ToolResult | null => {
+      for (let i = runs.length - 1; i >= 0; i--) {
+        if (runs[i].qualifiedName === qualifiedName) return runs[i].result;
+      }
+      return null;
+    },
+    [runs],
+  );
+
   const connectedCount = useMemo(
     () => new Set(catalog.map((t) => t.serverName)).size,
     [catalog],
@@ -184,6 +198,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       running,
       runs,
       latestRunForSelected,
+      getToolResult,
       setConfigText,
       loadExample,
       connect,
@@ -216,6 +231,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       running,
       runs,
       latestRunForSelected,
+      getToolResult,
       loadExample,
       connect,
       reset,

@@ -10,7 +10,7 @@ import type {
   ToolDescriptor,
   ToolResult,
 } from "../types";
-import type { McpClient } from "./mcpClient";
+import type { CallToolOptions, McpClient } from "./mcpClient";
 
 type MockTool = ToolDescriptor & {
   run: (args: Record<string, unknown>) => { text: string; structured?: unknown };
@@ -153,6 +153,26 @@ const RUNNABLE_COMMANDS = new Set([
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
+// Like delay, but rejects with an AbortError if the signal fires first — so the
+// workflow debugger's "Cancel" can interrupt an in-flight tool call mid-delay.
+function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 export class MockMcpClient implements McpClient {
   private tools = new Map<string, MockTool>();
 
@@ -195,8 +215,12 @@ export class MockMcpClient implements McpClient {
     return { catalog, skipped, failed };
   }
 
-  async callTool(qualifiedName: string, args: Record<string, unknown>): Promise<ToolResult> {
-    await delay(450);
+  async callTool(
+    qualifiedName: string,
+    args: Record<string, unknown>,
+    options?: CallToolOptions,
+  ): Promise<ToolResult> {
+    await abortableDelay(450, options?.signal);
     const tool = this.tools.get(qualifiedName);
     if (!tool) {
       return { content: [{ type: "text", text: `Unknown tool "${qualifiedName}"` }], isError: true };

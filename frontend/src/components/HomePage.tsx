@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import type { DragEvent, MouseEvent, ReactNode } from "react";
+import type { ClipboardEvent, DragEvent, MouseEvent, ReactNode } from "react";
 import { useAppState } from "../state/appState";
 import { validateConfig } from "../data/config";
 import { CodeEditor } from "./common/CodeEditor";
@@ -95,6 +95,15 @@ const FEATURES = [
   },
 ];
 
+// Pretty-print if the text is valid JSON; otherwise return null (leave as-is).
+function prettyJson(text: string): string | null {
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2);
+  } catch {
+    return null;
+  }
+}
+
 function PasteModal({
   initial,
   onCancel,
@@ -107,6 +116,21 @@ function PasteModal({
   const [draft, setDraft] = useState(initial);
   const result = validateConfig(draft);
   const hasText = draft.trim().length > 0;
+  const formatted = prettyJson(draft);
+  const canFormat = formatted !== null && formatted !== draft;
+
+  // Auto-format on paste: splice the pasted text into the current selection,
+  // then pretty-print the whole thing if it parses as JSON.
+  const handlePaste = (e: ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = e.clipboardData.getData("text");
+    if (!pasted) return;
+    e.preventDefault();
+    const el = e.currentTarget;
+    const start = el.selectionStart ?? draft.length;
+    const end = el.selectionEnd ?? draft.length;
+    const next = draft.slice(0, start) + pasted + draft.slice(end);
+    setDraft(prettyJson(next) ?? next);
+  };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onCancel}>
       <div
@@ -122,6 +146,7 @@ function PasteModal({
         <CodeEditor
           value={draft}
           onChange={setDraft}
+          onPaste={handlePaste}
           autoFocus
           ariaLabel="Paste mcp-config.json"
           minHeight={288}
@@ -141,13 +166,24 @@ function PasteModal({
               </span>
             </p>
           ))}
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={onCancel} className="rounded-md px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800">
-            Cancel
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            disabled={!canFormat}
+            onClick={() => formatted && setDraft(formatted)}
+            title="Pretty-print the JSON"
+            className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-zinc-300 transition-colors hover:border-zinc-500 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+          >
+            Format JSON
           </button>
-          <button type="button" disabled={!result.ok} onClick={() => onUse(draft)} className="btn-primary">
-            Open Workspace →
-          </button>
+          <div className="flex gap-2">
+            <button type="button" onClick={onCancel} className="rounded-md px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-800">
+              Cancel
+            </button>
+            <button type="button" disabled={!result.ok} onClick={() => onUse(draft)} className="btn-primary">
+              Open Workspace →
+            </button>
+          </div>
         </div>
       </div>
     </div>

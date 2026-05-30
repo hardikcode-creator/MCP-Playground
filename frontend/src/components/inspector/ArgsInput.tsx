@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import type { JsonSchema } from "../../types";
+import type { JsonSchema, ToolResult } from "../../types";
 import type { ArgMode } from "../../state/appState";
 import { applyParamValue, toParamRows } from "../../lib/schema";
 import { Braces } from "../../lib/icons";
 import { CodeEditor } from "../common/CodeEditor";
 import { ArgsJsonDialog } from "./ArgsJsonDialog";
+import { RefPickerModal } from "./RefPickerModal";
 import { ParamField } from "./ParamField";
 import type { ValueRef } from "../../types";
 
@@ -22,6 +23,7 @@ export function ArgsInput({
   enableRefs = false,
   refNodeOptions = [],
   currentNodeId,
+  getNodeResult,
 }: {
   schema: JsonSchema;
   argsText: string;
@@ -30,11 +32,13 @@ export function ArgsInput({
   setMode: (mode: ArgMode) => void;
   invalidFields?: string[];
   enableRefs?: boolean;
-  refNodeOptions?: Array<{ id: string; label: string }>;
+  refNodeOptions?: Array<{ id: string; label: string; tool?: string }>;
   currentNodeId?: string;
+  getNodeResult?: (nodeId: string) => ToolResult | null;
 }) {
   const rows = useMemo(() => toParamRows(schema), [schema]);
   const [jsonOpen, setJsonOpen] = useState(false);
+  const [pickerField, setPickerField] = useState<string | null>(null);
 
   let obj: Record<string, unknown> = {};
   try {
@@ -150,28 +154,60 @@ export function ArgsInput({
                       )}
                     </div>
                     {useRef ? (
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] uppercase tracking-wide text-zinc-500">Reference Node</span>
-                        <select
-                          className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100 focus:border-emerald-500 focus:outline-none"
-                          value={activeRef?.nodeId ?? ""}
-                          onChange={(e) =>
-                            setField(row.name, { $ref: { nodeId: e.target.value, path: activeRef?.path ?? "$" } })
-                          }
-                        >
-                          {refNodeOptions.length === 0 ? (
-                            <option value="">No nodes available</option>
-                          ) : (
-                            <>
-                              <option value="">Select node…</option>
-                              {refNodeOptions.map((opt) => (
-                                <option key={opt.id} value={opt.id} disabled={opt.id === currentNodeId}>
-                                  {opt.label}
-                                </option>
-                              ))}
-                            </>
-                          )}
-                        </select>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] uppercase tracking-wide text-zinc-500">Reference Node</span>
+                          <select
+                            className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100 focus:border-emerald-500 focus:outline-none"
+                            value={activeRef?.nodeId ?? ""}
+                            onChange={(e) =>
+                              setField(row.name, { $ref: { nodeId: e.target.value, path: activeRef?.path ?? "$" } })
+                            }
+                          >
+                            {refNodeOptions.length === 0 ? (
+                              <option value="">No nodes available</option>
+                            ) : (
+                              <>
+                                <option value="">Select node…</option>
+                                {refNodeOptions.map((opt) => (
+                                  <option key={opt.id} value={opt.id} disabled={opt.id === currentNodeId}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </>
+                            )}
+                          </select>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase tracking-wide text-zinc-500">
+                              Path <span className="text-red-400">required</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setPickerField(row.name)}
+                              className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300 transition-colors hover:border-emerald-600 hover:text-emerald-300"
+                            >
+                              Pick from response
+                            </button>
+                          </div>
+                          <input
+                            type="text"
+                            value={activeRef?.path ?? ""}
+                            placeholder="$.content[0].text"
+                            spellCheck={false}
+                            onChange={(e) =>
+                              setField(row.name, { $ref: { nodeId: activeRef?.nodeId ?? "", path: e.target.value } })
+                            }
+                            className={`w-full rounded-md border bg-zinc-950 px-2 py-1.5 font-mono text-xs text-zinc-100 focus:outline-none ${
+                              isInvalid ? "border-red-500 focus:border-red-400" : "border-zinc-700 focus:border-emerald-500"
+                            }`}
+                          />
+                          <span className="text-[10px] text-zinc-600">
+                            JSONPath into the source node’s raw result · <code className="text-zinc-500">$</code> = whole
+                            result.
+                          </span>
+                        </div>
                       </div>
                     ) : (
                       <ParamField
@@ -204,6 +240,25 @@ export function ArgsInput({
           onClose={() => setJsonOpen(false)}
         />
       )}
+
+      {pickerField &&
+        (() => {
+          const ref = readRef(obj[pickerField]);
+          const nodeId = ref?.nodeId ?? "";
+          return (
+            <RefPickerModal
+              sourceNodeId={nodeId}
+              sourceTool={refNodeOptions.find((o) => o.id === nodeId)?.tool}
+              result={getNodeResult && nodeId ? getNodeResult(nodeId) : null}
+              currentPath={ref?.path ?? "$"}
+              onPick={(p) => {
+                setField(pickerField, { $ref: { nodeId, path: p } });
+                setPickerField(null);
+              }}
+              onClose={() => setPickerField(null)}
+            />
+          );
+        })()}
     </div>
   );
 }

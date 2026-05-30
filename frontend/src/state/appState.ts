@@ -35,6 +35,10 @@ export type AppStateValue = {
   running: boolean;
   runs: RunRecord[];
   latestRunForSelected: RunRecord | null;
+  // Latest STANDALONE tool-run result for a tool (keyed by qualifiedName).
+  // Used to author $refs: path picking + the resolved-args preview sample come
+  // from running the TOOL in the inspector, not from running a workflow node.
+  getToolResult: (qualifiedName: string) => ToolResult | null;
 
   // actions
   setConfigText: (text: string) => void;
@@ -48,7 +52,11 @@ export type AppStateValue = {
   setArgsText: (text: string) => void;
   setArgMode: (mode: ArgMode) => void;
   runTool: () => Promise<void>;
-  callTool: (qualifiedName: string, args: Record<string, unknown>) => Promise<ToolResult>;
+  callTool: (
+    qualifiedName: string,
+    args: Record<string, unknown>,
+    options?: { signal?: AbortSignal },
+  ) => Promise<ToolResult>;
 };
 
 export const AppStateContext = createContext<AppStateValue | null>(null);

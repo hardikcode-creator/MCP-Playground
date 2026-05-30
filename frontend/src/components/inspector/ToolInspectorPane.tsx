@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useAppState } from "../../state/appState";
 import { Chevron, Play, Spinner } from "../../lib/icons";
 import { validateArgs } from "../../lib/schema";
@@ -6,7 +6,18 @@ import { resolveValueRefsDetailed } from "../../lib/workflowRefs";
 import { ArgsInput } from "./ArgsInput";
 import { ResponseViewer } from "./ResponseViewer";
 import type { WorkflowState } from "../../state/workflowStore";
-import type { RunStatus } from "../../types";
+import type { RunStatus, ToolResult } from "../../types";
+
+function readRef(value: unknown): { nodeId: string; path: string } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const wrapped = value as Record<string, unknown>;
+  if (!wrapped.$ref || typeof wrapped.$ref !== "object" || Array.isArray(wrapped.$ref)) return null;
+  const ref = wrapped.$ref as Record<string, unknown>;
+  return {
+    nodeId: typeof ref.nodeId === "string" ? ref.nodeId : "",
+    path: typeof ref.path === "string" ? ref.path : "",
+  };
+}
 
 export function ToolInspectorPane({
   workflow,
@@ -27,6 +38,7 @@ export function ToolInspectorPane({
     running,
     runTool,
     latestRunForSelected,
+    getToolResult,
   } = useAppState();
 
   const selectedWorkflowNode =
@@ -43,18 +55,48 @@ export function ToolInspectorPane({
     setArgsText(text);
   };
 
+  // For PATH PICKING only: the response *structure* (so you can choose a JSONPath)
+  // comes from running the source node's TOOL standalone in the inspector. The
+  // resolved *values* still flow from the node's own output (see preview below).
+  const nodeStructureSample = useCallback(
+    (nodeId: string): ToolResult | null => {
+      const n = workflow?.getNodeById(nodeId);
+      return n ? getToolResult(n.data.qualifiedName) : null;
+    },
+    [workflow, getToolResult],
+  );
+
   const { blocked, invalidFields, issueText } = useMemo(() => {
-    if (!selectedDescriptor) {
-      return { blocked: false, invalidFields: [] as string[], issueText: null as string | null };
-    }
+    const empty = { blocked: false, invalidFields: [] as string[], issueText: null as string | null };
+    if (!selectedDescriptor) return empty;
+
     const v = validateArgs(selectedDescriptor.inputSchema, effectiveArgsText);
-    if (v.ok) return { blocked: false, invalidFields: [] as string[], issueText: null as string | null };
-    const invalidFields = v.errors.map((e) => e.path).filter((p) => p !== "(root)");
-    const first = v.errors[0];
+    const issues: Array<{ path: string; message: string }> = v.ok ? [] : [...v.errors];
+
+    // $ref wiring on a workflow node must name a source node AND a path.
+    if (selectedWorkflowNode) {
+      try {
+        const parsed = JSON.parse(effectiveArgsText || "{}");
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          for (const [key, val] of Object.entries(parsed as Record<string, unknown>)) {
+            const ref = readRef(val);
+            if (!ref) continue;
+            if (!ref.nodeId) issues.push({ path: key, message: "needs a source node" });
+            else if (!ref.path.trim()) issues.push({ path: key, message: "needs a reference path" });
+          }
+        }
+      } catch {
+        // Invalid JSON is already reported by validateArgs above.
+      }
+    }
+
+    if (issues.length === 0) return empty;
+    const invalidFields = [...new Set(issues.map((e) => e.path).filter((p) => p !== "(root)"))];
+    const first = issues[0];
     const head = first.path === "(root)" ? first.message : `${first.path} ${first.message}`;
-    const issueText = v.errors.length === 1 ? head : `Fix ${v.errors.length} issues — ${head}`;
+    const issueText = issues.length === 1 ? head : `Fix ${issues.length} issues — ${head}`;
     return { blocked: true, invalidFields, issueText };
-  }, [selectedDescriptor, effectiveArgsText]);
+  }, [selectedDescriptor, effectiveArgsText, selectedWorkflowNode]);
 
   const liveResolvedPreview = useMemo(() => {
     if (!selectedWorkflowNode || !workflow) return null;
@@ -64,17 +106,20 @@ export function ToolInspectorPane({
     } catch {
       return null;
     }
+    // Values resolve against the source NODE's own output (its last run result),
+    // not the tool's standalone sample — the sample only shapes path picking.
     return resolveValueRefsDetailed(
       parsed,
-      (nodeId) => workflow.getNodeOutputById(nodeId),
+      (nodeId) => workflow.getNodeById(nodeId)?.data.lastResult ?? undefined,
       (nodeId) => Boolean(workflow.getNodeById(nodeId)),
     );
   }, [selectedWorkflowNode, workflow]);
   const refNodeOptions = useMemo(() => {
     if (!workflow) return [];
-    return workflow.nodes.map((n) => ({ id: n.id, label: n.id }));
+    return workflow.nodes.map((n) => ({ id: n.id, label: n.id, tool: n.data.qualifiedName }));
   }, [workflow]);
 
+  const paused = selectedWorkflowNode?.data.status === "paused";
   const runningState = selectedWorkflowNode ? selectedWorkflowNode.data.status === "running" : running;
   const latestRun = selectedWorkflowNode
     ? selectedWorkflowNode.data.lastResult
@@ -163,6 +208,7 @@ export function ToolInspectorPane({
                 enableRefs={Boolean(selectedWorkflowNode)}
                 refNodeOptions={refNodeOptions}
                 currentNodeId={selectedWorkflowNode?.id}
+                getNodeResult={nodeStructureSample}
               />
               {issueText ? (
                 <span className="text-xs text-red-400">{issueText}</span>
@@ -197,39 +243,68 @@ export function ToolInspectorPane({
               </div>
             )}
 
-            <div className="group flex items-center gap-3">
-              <button
-                type="button"
-                disabled={runningState || blocked || !!selectedWorkflowNode}
-                onClick={() => {
-                  void runTool();
-                }}
-                aria-label="Run tool"
-                title={selectedWorkflowNode ? "Run from workflow canvas toolbar" : "Run tool"}
-                className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 transition-all duration-200 ease-spring hover:scale-105 hover:border-emerald-400/60 hover:bg-emerald-500/20 hover:text-emerald-200 active:scale-95 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-transparent disabled:text-zinc-600 disabled:hover:scale-100"
-              >
-                {!runningState && !blocked && !selectedWorkflowNode && (
-                  <span
-                    className="animate-pulse-glow absolute -inset-1 rounded-full bg-emerald-500/20 blur-md"
-                    aria-hidden="true"
-                  />
-                )}
-                {runningState ? (
-                  <Spinner className="relative h-5 w-5 text-emerald-300" />
-                ) : (
-                  <Play className="relative ml-0.5 h-4 w-4" />
-                )}
-              </button>
-              <span className="font-mono text-xs text-zinc-500 transition-colors group-hover:text-zinc-300">
-                {runningState
-                  ? "Running…"
-                  : selectedWorkflowNode
-                    ? "Run from canvas toolbar"
-                    : blocked
-                      ? "Fix args to run"
-                      : "Run Tool"}
-              </span>
-            </div>
+            {paused && selectedWorkflowNode && workflow ? (
+              <div className="flex flex-col gap-2 rounded-lg border border-amber-700/50 bg-amber-950/30 p-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                  <span className="text-xs font-semibold text-amber-300">Paused at breakpoint</span>
+                </div>
+                <p className="text-[11px] text-amber-200/70">
+                  Edit the arguments above to resume with changes, or skip this node.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => workflow.resumeNode(selectedWorkflowNode.id)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-emerald-600/60 bg-emerald-900/40 px-2.5 py-1 text-xs font-medium text-emerald-200 transition-colors hover:border-emerald-400 hover:bg-emerald-900/70"
+                  >
+                    <Play className="h-3 w-3" />
+                    Resume
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => workflow.skipNode(selectedWorkflowNode.id)}
+                    className="rounded-md border border-zinc-600 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-colors hover:border-zinc-400 hover:bg-zinc-800"
+                  >
+                    Skip
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="group flex items-center gap-3">
+                <button
+                  type="button"
+                  disabled={runningState || blocked || !!selectedWorkflowNode}
+                  onClick={() => {
+                    void runTool();
+                  }}
+                  aria-label="Run tool"
+                  title={selectedWorkflowNode ? "Run from workflow canvas toolbar" : "Run tool"}
+                  className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 transition-all duration-200 ease-spring hover:scale-105 hover:border-emerald-400/60 hover:bg-emerald-500/20 hover:text-emerald-200 active:scale-95 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-transparent disabled:text-zinc-600 disabled:hover:scale-100"
+                >
+                  {!runningState && !blocked && !selectedWorkflowNode && (
+                    <span
+                      className="animate-pulse-glow absolute -inset-1 rounded-full bg-emerald-500/20 blur-md"
+                      aria-hidden="true"
+                    />
+                  )}
+                  {runningState ? (
+                    <Spinner className="relative h-5 w-5 text-emerald-300" />
+                  ) : (
+                    <Play className="relative ml-0.5 h-4 w-4" />
+                  )}
+                </button>
+                <span className="font-mono text-xs text-zinc-500 transition-colors group-hover:text-zinc-300">
+                  {runningState
+                    ? "Running…"
+                    : selectedWorkflowNode
+                      ? "Run from canvas toolbar"
+                      : blocked
+                        ? "Fix args to run"
+                        : "Run Tool"}
+                </span>
+              </div>
+            )}
 
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">

@@ -1,37 +1,10 @@
 import type { ValueRef } from "../types";
+import { jsonPath, RefResolutionError as JsonPathError } from "./workflow/refs";
 
 const REF_SHAPE_ERROR = "Invalid $ref shape: expected {$ref:{nodeId:string,path:string}}";
 const REF_SOURCE_MISSING_ERROR = "$ref source node not found in workflow:";
 const REF_OUTPUT_UNAVAILABLE_ERROR = "$ref source output not available yet:";
 const REF_PATH_MISSING_ERROR = "$ref path not found:";
-
-function parsePath(path: string): string[] {
-  return path
-    .replace(/\[(\d+)\]/g, ".$1")
-    .split(".")
-    .filter(Boolean);
-}
-
-export function getByPath(value: unknown, path: string): unknown {
-  if (!path) return value;
-  const parts = parsePath(path);
-  let current: unknown = value;
-  for (const part of parts) {
-    if (current === null || current === undefined) return undefined;
-    if (Array.isArray(current)) {
-      const idx = Number(part);
-      if (!Number.isInteger(idx)) return undefined;
-      current = current[idx];
-      continue;
-    }
-    if (typeof current === "object") {
-      current = (current as Record<string, unknown>)[part];
-      continue;
-    }
-    return undefined;
-  }
-  return current;
-}
 
 function asRef(input: unknown): ValueRef["$ref"] | null {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
@@ -108,7 +81,20 @@ export function resolveValueRefsDetailed(
         }
         return null;
       }
-      const resolved = getByPath(source, ref.path);
+      // Resolve via the SAME JSONPath subset the backend uses, against the
+      // RAW tool result (so $.content[0].text behaves identically).
+      let resolved: unknown;
+      try {
+        resolved = jsonPath(source, ref.path || "$");
+      } catch (e) {
+        errors.push({
+          code: "path_missing",
+          nodeId: ref.nodeId,
+          path: ref.path,
+          message: e instanceof JsonPathError ? e.message : `${REF_PATH_MISSING_ERROR} ${ref.nodeId}.${ref.path}`,
+        });
+        return null;
+      }
       if (resolved === undefined) {
         errors.push({
           code: "path_missing",
