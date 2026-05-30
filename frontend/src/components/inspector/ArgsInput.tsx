@@ -1,33 +1,44 @@
-import { useMemo } from "react";
-import type { JsonSchema } from "../../types";
+import { useMemo, useState } from "react";
+import type { JsonSchema, ToolResult } from "../../types";
 import type { ArgMode } from "../../state/appState";
 import { applyParamValue, toParamRows } from "../../lib/schema";
+import { Braces } from "../../lib/icons";
 import { CodeEditor } from "../common/CodeEditor";
+import { ArgsJsonDialog } from "./ArgsJsonDialog";
+import { RefPickerModal } from "./RefPickerModal";
 import { ParamField } from "./ParamField";
 import type { ValueRef } from "../../types";
 
 // Postman-style args editor. Params and Raw are two views of the SAME args
-// object: editing either one rewrites argsText so they stay in sync.
+// object: editing either one rewrites argsText so they stay in sync. When
+// `enableRefs` is set (workflow-node inspection), each field can instead be
+// wired to another node's output via a `$ref`.
 export function ArgsInput({
   schema,
   argsText,
   setArgsText,
   mode,
   setMode,
-  missingRequired = [],
+  invalidFields = [],
+  enableRefs = false,
   refNodeOptions = [],
   currentNodeId,
+  getNodeResult,
 }: {
   schema: JsonSchema;
   argsText: string;
   setArgsText: (text: string) => void;
   mode: ArgMode;
   setMode: (mode: ArgMode) => void;
-  missingRequired?: string[];
-  refNodeOptions?: Array<{ id: string; label: string }>;
+  invalidFields?: string[];
+  enableRefs?: boolean;
+  refNodeOptions?: Array<{ id: string; label: string; tool?: string }>;
   currentNodeId?: string;
+  getNodeResult?: (nodeId: string) => ToolResult | null;
 }) {
   const rows = useMemo(() => toParamRows(schema), [schema]);
+  const [jsonOpen, setJsonOpen] = useState(false);
+  const [pickerField, setPickerField] = useState<string | null>(null);
 
   let obj: Record<string, unknown> = {};
   try {
@@ -68,9 +79,21 @@ export function ArgsInput({
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Arguments</span>
-        <div className="flex items-center gap-0.5 rounded-md bg-zinc-800/60 p-0.5">
-          {tab("params", "Params")}
-          {tab("raw", "Raw")}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setJsonOpen(true)}
+            title="Edit arguments as JSON"
+            aria-label="Edit arguments as JSON"
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-emerald-300"
+          >
+            <Braces />
+            JSON
+          </button>
+          <div className="flex items-center gap-0.5 rounded-md bg-zinc-800/60 p-0.5">
+            {tab("params", "Params")}
+            {tab("raw", "Raw")}
+          </div>
         </div>
       </div>
 
@@ -83,7 +106,11 @@ export function ArgsInput({
       ) : (
         <div className="flex flex-col gap-2.5">
           {rows.map((row) => {
-            const isMissing = missingRequired.includes(row.name);
+            const cur = obj[row.name];
+            const isEmpty = cur === undefined || cur === null || cur === "";
+            const isInvalid = invalidFields.includes(row.name);
+            const activeRef = enableRefs ? readRef(cur) : null;
+            const useRef = Boolean(activeRef);
             return (
               <div key={row.name} className="flex flex-col gap-1">
                 <div className="flex items-baseline gap-1.5">
@@ -94,47 +121,47 @@ export function ArgsInput({
                   ) : (
                     <span className="text-[10px] text-zinc-600">optional</span>
                   )}
-                  {isMissing && <span className="text-[10px] text-red-400">needs a value</span>}
+                  {isInvalid && (
+                    <span className="text-[10px] text-red-400">
+                      {row.required && isEmpty ? "needs a value" : "invalid"}
+                    </span>
+                  )}
                 </div>
                 {row.description && <p className="text-[11px] text-zinc-500">{row.description}</p>}
-                {(() => {
-                  const fieldValue = obj[row.name];
-                  const activeRef = readRef(fieldValue);
-                  const useRef = Boolean(activeRef);
-                  return (
-                    <div className="flex flex-col gap-1.5">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (useRef) {
-                              setField(row.name, "");
-                              return;
-                            }
-                            setField(row.name, { $ref: { nodeId: firstAllowedNodeId, path: "" } });
-                          }}
-                          className={`rounded border px-2 py-0.5 text-[10px] font-medium transition-colors ${
-                            useRef
-                              ? "border-emerald-700 bg-emerald-950/40 text-emerald-300"
-                              : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
-                          }`}
-                        >
-                          {useRef ? "Using ref" : "Use reference"}
-                        </button>
-                        {useRef && (
-                          <span className="text-[10px] text-zinc-500">
-                            maps value from another node output
-                          </span>
-                        )}
-                      </div>
-                      {useRef ? (
+
+                {enableRefs ? (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (useRef) {
+                            setField(row.name, "");
+                            return;
+                          }
+                          setField(row.name, { $ref: { nodeId: firstAllowedNodeId, path: "$" } });
+                        }}
+                        className={`rounded border px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                          useRef
+                            ? "border-emerald-700 bg-emerald-950/40 text-emerald-300"
+                            : "border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                        }`}
+                      >
+                        {useRef ? "Using ref" : "Use reference"}
+                      </button>
+                      {useRef && (
+                        <span className="text-[10px] text-zinc-500">maps value from another node output</span>
+                      )}
+                    </div>
+                    {useRef ? (
+                      <div className="flex flex-col gap-2">
                         <div className="flex flex-col gap-1">
                           <span className="text-[10px] uppercase tracking-wide text-zinc-500">Reference Node</span>
                           <select
                             className="w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-xs text-zinc-100 focus:border-emerald-500 focus:outline-none"
                             value={activeRef?.nodeId ?? ""}
                             onChange={(e) =>
-                              setField(row.name, { $ref: { nodeId: e.target.value, path: "" } })
+                              setField(row.name, { $ref: { nodeId: e.target.value, path: activeRef?.path ?? "$" } })
                             }
                           >
                             {refNodeOptions.length === 0 ? (
@@ -151,22 +178,87 @@ export function ArgsInput({
                             )}
                           </select>
                         </div>
-                      ) : (
-                        <ParamField
-                          def={row}
-                          value={fieldValue}
-                          invalid={isMissing}
-                          onChange={(next) => setField(row.name, next)}
-                        />
-                      )}
-                    </div>
-                  );
-                })()}
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase tracking-wide text-zinc-500">
+                              Path <span className="text-red-400">required</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setPickerField(row.name)}
+                              className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300 transition-colors hover:border-emerald-600 hover:text-emerald-300"
+                            >
+                              Pick from response
+                            </button>
+                          </div>
+                          <input
+                            type="text"
+                            value={activeRef?.path ?? ""}
+                            placeholder="$.content[0].text"
+                            spellCheck={false}
+                            onChange={(e) =>
+                              setField(row.name, { $ref: { nodeId: activeRef?.nodeId ?? "", path: e.target.value } })
+                            }
+                            className={`w-full rounded-md border bg-zinc-950 px-2 py-1.5 font-mono text-xs text-zinc-100 focus:outline-none ${
+                              isInvalid ? "border-red-500 focus:border-red-400" : "border-zinc-700 focus:border-emerald-500"
+                            }`}
+                          />
+                          <span className="text-[10px] text-zinc-600">
+                            JSONPath into the source node’s raw result · <code className="text-zinc-500">$</code> = whole
+                            result.
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <ParamField
+                        def={row}
+                        value={cur}
+                        invalid={isInvalid}
+                        onChange={(next) => setField(row.name, next)}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <ParamField
+                    def={row}
+                    value={cur}
+                    invalid={isInvalid}
+                    onChange={(next) => setField(row.name, next)}
+                  />
+                )}
               </div>
             );
           })}
         </div>
       )}
+
+      {jsonOpen && (
+        <ArgsJsonDialog
+          schema={schema}
+          value={argsText}
+          onChange={setArgsText}
+          onClose={() => setJsonOpen(false)}
+        />
+      )}
+
+      {pickerField &&
+        (() => {
+          const ref = readRef(obj[pickerField]);
+          const nodeId = ref?.nodeId ?? "";
+          return (
+            <RefPickerModal
+              sourceNodeId={nodeId}
+              sourceTool={refNodeOptions.find((o) => o.id === nodeId)?.tool}
+              result={getNodeResult && nodeId ? getNodeResult(nodeId) : null}
+              currentPath={ref?.path ?? "$"}
+              onPick={(p) => {
+                setField(pickerField, { $ref: { nodeId, path: p } });
+                setPickerField(null);
+              }}
+              onClose={() => setPickerField(null)}
+            />
+          );
+        })()}
     </div>
   );
 }

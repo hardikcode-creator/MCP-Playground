@@ -63,8 +63,20 @@ export type ConnectResult = {
 // Frontend-only record of a single tool invocation (Pane 3).
 export type RunStatus = "success" | "error";
 
-// Workflow canvas node execution status.
-export type NodeStatus = "idle" | "running" | "success" | "error" | "skipped" | "cycle";
+// Workflow canvas node execution status. Mirrors the backend executor's node
+// statuses (pending|ready|running|paused|completed|failed|skipped) plus two
+// frontend-only states: "idle" (resting, before any run) and "cycle" (a
+// pre-run lint state from the cycle detector).
+export type NodeStatus =
+  | "idle"
+  | "pending"
+  | "ready"
+  | "running"
+  | "paused"
+  | "completed"
+  | "failed"
+  | "skipped"
+  | "cycle";
 
 export type RunRecord = {
   qualifiedName: string;

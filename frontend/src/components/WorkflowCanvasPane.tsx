@@ -14,6 +14,7 @@ import { useAppState } from "../state/appState";
 import type { WorkflowState } from "../state/workflowStore";
 import { ToolNode } from "./canvas/ToolNode";
 import { DeletableEdge } from "./canvas/DeletableEdge";
+import { CanvasActionsContext } from "./canvas/canvasActions";
 import { detectCycles } from "../lib/detectCycles";
 import { findMissingRequired } from "../lib/schema";
 import { collectValueRefNodeIds } from "../lib/workflowRefs";
@@ -29,6 +30,28 @@ function PlayIcon() {
       <path d="M8 5.14c0-.86.96-1.37 1.67-.88l9.2 6.86a1.06 1.06 0 0 1 0 1.76l-9.2 6.86c-.71.49-1.67-.02-1.67-.88z" />
     </svg>
   );
+}
+
+function StopIcon() {
+  return (
+    <svg width={10} height={10} viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+      <rect x="1.5" y="1.5" width="9" height="9" rx="1.5" />
+    </svg>
+  );
+}
+
+// A node arg with a $ref that is missing its source node or path can't run.
+function hasIncompleteRef(value: Record<string, unknown>): boolean {
+  for (const v of Object.values(value)) {
+    if (!v || typeof v !== "object" || Array.isArray(v)) continue;
+    const wrapped = v as Record<string, unknown>;
+    if (!wrapped.$ref || typeof wrapped.$ref !== "object" || Array.isArray(wrapped.$ref)) continue;
+    const ref = wrapped.$ref as Record<string, unknown>;
+    const nodeId = typeof ref.nodeId === "string" ? ref.nodeId : "";
+    const path = typeof ref.path === "string" ? ref.path : "";
+    if (!nodeId || !path.trim()) return true;
+  }
+  return false;
 }
 
 function Canvas({
@@ -50,9 +73,13 @@ function Canvas({
     onNodesChange,
     onEdgesChange,
     onConnect,
-    resetStatuses,
     runWorkflow,
+    cancelWorkflow,
+    toggleBreakpoint,
+    getWorkflowJson,
   } = workflow;
+  const [copyState, setCopyState] = useState<"idle" | "ok" | "error">("idle");
+  const canvasActions = useMemo(() => ({ toggleBreakpoint }), [toggleBreakpoint]);
   const { screenToFlowPosition } = useReactFlow();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [dismissedCycleKey, setDismissedCycleKey] = useState<string | null>(null);
@@ -150,9 +177,21 @@ function Canvas({
   );
 
   const handleRunWorkflow = useCallback(() => {
-    resetStatuses();
     void runWorkflow(callTool);
-  }, [resetStatuses, runWorkflow, callTool]);
+  }, [runWorkflow, callTool]);
+
+  const handleExport = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(getWorkflowJson(), null, 2));
+      setCopyState("ok");
+    } catch {
+      setCopyState("error");
+    } finally {
+      setTimeout(() => setCopyState("idle"), 1500);
+    }
+  }, [getWorkflowJson]);
+
+  const pausedCount = useMemo(() => nodes.filter((n) => n.data.status === "paused").length, [nodes]);
 
   // Build a human-readable cycle node name list for the banner.
   const cycleNodeNames = useMemo(() => {
@@ -171,14 +210,16 @@ function Canvas({
         return true;
       }
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return true;
-      if (findMissingRequired(n.data.inputSchema, parsed as Record<string, unknown>).length > 0) return true;
+      const obj = parsed as Record<string, unknown>;
+      if (findMissingRequired(n.data.inputSchema, obj).length > 0) return true;
+      if (hasIncompleteRef(obj)) return true;
     }
     return false;
   }, [nodes]);
   const showBanner = hasCycle && dismissedCycleKey !== edgeKey;
 
   return (
-    <>
+    <CanvasActionsContext.Provider value={canvasActions}>
       {/* Cycle warning banner */}
       {showBanner && (
         <div className="flex items-start justify-between gap-3 border-b border-orange-800/60 bg-orange-950/40 px-3 py-2">
@@ -226,17 +267,48 @@ function Canvas({
               {nodes.length} node{nodes.length === 1 ? "" : "s"} · {edges.length} edge{edges.length === 1 ? "" : "s"}
             </span>
           )}
+          {workflowRunning && pausedCount > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-700/60 bg-amber-950/40 px-2 py-0.5 font-mono text-[10px] text-amber-300">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+              paused ({pausedCount})
+            </span>
+          )}
         </div>
-        <button
-          type="button"
-          disabled={nodes.length === 0 || workflowRunning || hasCycle || hasInvalidArgs}
-          onClick={handleRunWorkflow}
-          title={hasCycle ? "Resolve cycle before running" : hasInvalidArgs ? "Fix invalid node args before running" : undefined}
-          className="flex items-center gap-1.5 rounded-md border border-emerald-700/60 bg-emerald-900/40 px-2.5 py-1 text-xs font-medium text-emerald-300 transition-all hover:border-emerald-500 hover:bg-emerald-900/70 hover:text-emerald-200 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-transparent disabled:text-zinc-600"
-        >
-          <PlayIcon />
-          {workflowRunning ? "Running…" : "Run Workflow"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={nodes.length === 0}
+            onClick={() => {
+              void handleExport();
+            }}
+            title="Copy this workflow as backend-shaped JSON"
+            className="flex items-center gap-1.5 rounded-md border border-zinc-700 px-2.5 py-1 text-xs font-medium text-zinc-300 transition-all hover:border-zinc-500 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:border-zinc-800 disabled:text-zinc-600"
+          >
+            {copyState === "ok" ? "Copied JSON" : copyState === "error" ? "Copy failed" : "Export JSON"}
+          </button>
+          {workflowRunning ? (
+            <button
+              type="button"
+              onClick={cancelWorkflow}
+              title="Cancel the running workflow"
+              className="flex items-center gap-1.5 rounded-md border border-red-700/60 bg-red-900/40 px-2.5 py-1 text-xs font-medium text-red-300 transition-all hover:border-red-500 hover:bg-red-900/70 hover:text-red-200"
+            >
+              <StopIcon />
+              Cancel
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={nodes.length === 0 || hasCycle || hasInvalidArgs}
+              onClick={handleRunWorkflow}
+              title={hasCycle ? "Resolve cycle before running" : hasInvalidArgs ? "Fix invalid node args before running" : undefined}
+              className="flex items-center gap-1.5 rounded-md border border-emerald-700/60 bg-emerald-900/40 px-2.5 py-1 text-xs font-medium text-emerald-300 transition-all hover:border-emerald-500 hover:bg-emerald-900/70 hover:text-emerald-200 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-transparent disabled:text-zinc-600"
+            >
+              <PlayIcon />
+              Run Workflow
+            </button>
+          )}
+        </div>
       </div>
 
       <div ref={containerRef} className="h-full w-full" onDragOver={onDragOver} onDrop={onDrop}>
@@ -277,7 +349,7 @@ function Canvas({
           </div>
         )}
       </div>
-    </>
+    </CanvasActionsContext.Provider>
   );
 }
 

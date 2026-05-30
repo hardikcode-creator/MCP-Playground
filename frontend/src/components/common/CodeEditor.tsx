@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import type { ClipboardEvent } from "react";
 import { KIND_CLASS, tokenizeJson } from "../../lib/jsonTokens";
 
 // A syntax-highlighted text editor: a transparent <textarea> layered over an
@@ -9,6 +10,7 @@ import { KIND_CLASS, tokenizeJson } from "../../lib/jsonTokens";
 export function CodeEditor({
   value,
   onChange,
+  onPaste,
   placeholder,
   minHeight = 160,
   autoFocus = false,
@@ -17,6 +19,7 @@ export function CodeEditor({
 }: {
   value: string;
   onChange: (value: string) => void;
+  onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
   placeholder?: string;
   minHeight?: number;
   autoFocus?: boolean;
@@ -42,6 +45,7 @@ export function CodeEditor({
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onPaste={onPaste}
         onScroll={(e) => {
           const el = preRef.current;
           if (!el) return;

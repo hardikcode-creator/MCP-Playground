@@ -234,6 +234,26 @@ export function Home({ className }: { className?: string }) {
   );
 }
 
+export function Braces({ className }: { className?: string }) {
+  return (
+    <svg
+      width={14}
+      height={14}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`shrink-0 ${className ?? ""}`}
+      aria-hidden="true"
+    >
+      <path d="M6.5 2.5c-1.3 0-1.9.6-1.9 1.9v1.3c0 .9-.5 1.4-1.4 1.4.9 0 1.4.5 1.4 1.4v1.3c0 1.3.6 1.9 1.9 1.9" />
+      <path d="M9.5 2.5c1.3 0 1.9.6 1.9 1.9v1.3c0 .9.5 1.4 1.4 1.4-.9 0-1.4.5-1.4 1.4v1.3c0 1.3-.6 1.9-1.9 1.9" />
+    </svg>
+  );
+}
+
 export function Play({ className }: { className?: string }) {
   return (
     <svg width={20} height={20} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
