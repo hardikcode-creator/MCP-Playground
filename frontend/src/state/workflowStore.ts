@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   addEdge,
   applyNodeChanges,
@@ -14,7 +14,7 @@ import type {
 } from "@xyflow/react";
 import type { NodeStatus, ToolDescriptor, ToolResult } from "../types";
 import { seedArgs, findMissingRequired } from "../lib/schema";
-import { resolveValueRefs } from "../lib/workflowRefs";
+import { collectValueRefNodeIds, resolveValueRefs } from "../lib/workflowRefs";
 
 export type ToolNodeData = {
   qualifiedName: string;
@@ -57,10 +57,14 @@ export function useWorkflowStore(): WorkflowState {
   const [nodeOutputs, setNodeOutputs] = useState<Record<string, unknown>>({});
   const [workflowRunning, setWorkflowRunning] = useState(false);
   const [cycleNodeIds, setCycleNodeIdsState] = useState<string[]>([]);
+  const nodeIdCounterByToolRef = useRef<Record<string, number>>({});
 
   const addNode = useCallback((tool: ToolDescriptor, position: { x: number; y: number }) => {
+    const nextForTool = (nodeIdCounterByToolRef.current[tool.qualifiedName] ?? 0) + 1;
+    nodeIdCounterByToolRef.current[tool.qualifiedName] = nextForTool;
+    const uniqueNodeId = `${tool.qualifiedName}-${nextForTool}`;
     const newNode: Node<ToolNodeData> = {
-      id: `${tool.qualifiedName}-${Date.now()}`,
+      id: uniqueNodeId,
       type: "tool",
       position,
       data: {
@@ -96,6 +100,7 @@ export function useWorkflowStore(): WorkflowState {
     setNodes([]);
     setEdges([]);
     setNodeOutputs({});
+    nodeIdCounterByToolRef.current = {};
   }, []);
 
   const setNodeStatus = useCallback((nodeId: string, status: NodeStatus) => {
@@ -205,6 +210,8 @@ export function useWorkflowStore(): WorkflowState {
 
       // Preflight parse + required-field validation.
       const validatedArgs = new Map<string, Record<string, unknown>>();
+      const refDependencies = new Map<string, Set<string>>();
+      const existingNodeIds = new Set(snapNodes.map((n) => n.id));
       for (const n of snapNodes) {
         let parsed: unknown;
         try {
@@ -228,10 +235,30 @@ export function useWorkflowStore(): WorkflowState {
           setNodeStatus(n.id, "error");
           continue;
         }
+        const referencedNodeIds = new Set(collectValueRefNodeIds(parsed));
+        let missingRefSource = false;
+        for (const refNodeId of referencedNodeIds) {
+          if (!existingNodeIds.has(refNodeId)) {
+            missingRefSource = true;
+            break;
+          }
+        }
+        if (missingRefSource) {
+          finalStatus.set(n.id, "error");
+          resolved.add(n.id);
+          setNodeStatus(n.id, "error");
+          continue;
+        }
+        refDependencies.set(n.id, referencedNodeIds);
         validatedArgs.set(n.id, parsed as Record<string, unknown>);
       }
 
       for (const id of finalStatus.keys()) resolved.add(id);
+      for (const [nodeId, refs] of refDependencies.entries()) {
+        const predSet = predecessors.get(nodeId);
+        if (!predSet) continue;
+        for (const refNodeId of refs) predSet.add(refNodeId);
+      }
 
       const isReady = (nodeId: string): boolean => {
         const preds = predecessors.get(nodeId) ?? new Set();

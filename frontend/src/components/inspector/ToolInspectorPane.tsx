@@ -1,8 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useAppState } from "../../state/appState";
 import { Chevron, Play, Spinner } from "../../lib/icons";
 import { findMissingRequired } from "../../lib/schema";
-import { resolveValueRefs } from "../../lib/workflowRefs";
+import { resolveValueRefsDetailed } from "../../lib/workflowRefs";
 import { ArgsInput } from "./ArgsInput";
 import { ResponseViewer } from "./ResponseViewer";
 import type { WorkflowState } from "../../state/workflowStore";
@@ -15,6 +15,7 @@ export function ToolInspectorPane({
   workflow?: WorkflowState;
   onCollapse?: () => void;
 }) {
+  const [copyState, setCopyState] = useState<"idle" | "ok" | "error">("idle");
   const {
     inspectorSource,
     selectedWorkflowNodeId,
@@ -68,8 +69,19 @@ export function ToolInspectorPane({
     } catch {
       return null;
     }
-    return resolveValueRefs(parsed, (nodeId) => workflow.getNodeOutputById(nodeId));
+    return resolveValueRefsDetailed(
+      parsed,
+      (nodeId) => workflow.getNodeOutputById(nodeId),
+      (nodeId) => Boolean(workflow.getNodeById(nodeId)),
+    );
   }, [selectedWorkflowNode, workflow]);
+  const refNodeOptions = useMemo(() => {
+    if (!workflow) return [];
+    return workflow.nodes.map((n) => ({
+      id: n.id,
+      label: n.id,
+    }));
+  }, [workflow]);
 
   const blocked = argsError !== null || missingRequired.length > 0;
   const runningState = selectedWorkflowNode
@@ -87,6 +99,18 @@ export function ToolInspectorPane({
         }
       : null
     : latestRunForSelected;
+
+  const copyNodeId = async () => {
+    if (!selectedWorkflowNode) return;
+    try {
+      await navigator.clipboard.writeText(selectedWorkflowNode.id);
+      setCopyState("ok");
+    } catch {
+      setCopyState("error");
+    } finally {
+      setTimeout(() => setCopyState("idle"), 1500);
+    }
+  };
 
   return (
     <section className="flex h-full flex-col border-l border-zinc-800 bg-zinc-900">
@@ -117,6 +141,28 @@ export function ToolInspectorPane({
               <span className="text-xs text-zinc-400">{selectedDescriptor.description}</span>
             </div>
 
+            {selectedWorkflowNode && (
+              <div className="flex flex-col gap-1 rounded-md border border-zinc-800 bg-zinc-950/60 p-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                    Node ID
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void copyNodeId();
+                    }}
+                    className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] font-medium text-zinc-300 transition-colors hover:border-zinc-500 hover:bg-zinc-800"
+                    aria-label="Copy node id"
+                    title="Copy node id"
+                  >
+                    {copyState === "ok" ? "Copied" : copyState === "error" ? "Copy failed" : "Copy"}
+                  </button>
+                </div>
+                <code className="break-all font-mono text-[10px] text-zinc-300">{selectedWorkflowNode.id}</code>
+              </div>
+            )}
+
             <div className="h-px bg-zinc-800" />
 
             <div className="flex flex-col gap-1.5">
@@ -127,12 +173,18 @@ export function ToolInspectorPane({
                 mode={argMode}
                 setMode={setArgMode}
                 missingRequired={missingRequired}
+                refNodeOptions={refNodeOptions}
+                currentNodeId={selectedWorkflowNode?.id}
               />
               {argsError ? (
                 <span className="text-xs text-red-400">{argsError}</span>
               ) : missingRequired.length > 0 ? (
                 <span className="text-xs text-red-400">
                   Fill the required field{missingRequired.length === 1 ? "" : "s"} highlighted above to run.
+                </span>
+              ) : selectedWorkflowNode ? (
+                <span className="text-xs text-zinc-500">
+                  Select a source node to pass its full output into this field.
                 </span>
               ) : (
                 <span className="text-xs text-zinc-500">
@@ -155,7 +207,7 @@ export function ToolInspectorPane({
                 </div>
                 <pre className="max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-md border border-zinc-800 bg-zinc-950 p-2.5 font-mono text-xs text-zinc-300">
                   {liveResolvedPreview.errors.length > 0
-                    ? liveResolvedPreview.errors.join("\n")
+                    ? liveResolvedPreview.errors.map((e) => e.message).join("\n")
                     : JSON.stringify(liveResolvedPreview.value, null, 2)}
                 </pre>
               </div>

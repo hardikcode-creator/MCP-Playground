@@ -16,6 +16,7 @@ import { ToolNode } from "./canvas/ToolNode";
 import { DeletableEdge } from "./canvas/DeletableEdge";
 import { detectCycles } from "../lib/detectCycles";
 import { findMissingRequired } from "../lib/schema";
+import { collectValueRefNodeIds } from "../lib/workflowRefs";
 
 const NODE_TYPES: NodeTypes = { tool: ToolNode as NodeTypes[string] };
 const EDGE_TYPES: EdgeTypes = { deletable: DeletableEdge as EdgeTypes[string] };
@@ -64,14 +65,45 @@ function Canvas({
     () => edges.map((e) => `${e.source}->${e.target}`).sort().join("|"),
     [edges],
   );
+  const refDependencyEdges = useMemo(() => {
+    const existingIds = new Set(nodes.map((n) => n.id));
+    const refs: Array<{ source: string; target: string }> = [];
+    for (const n of nodes) {
+      try {
+        const parsed = JSON.parse(n.data.argsText || "{}");
+        const nodeIds = collectValueRefNodeIds(parsed);
+        for (const sourceId of nodeIds) {
+          if (existingIds.has(sourceId)) refs.push({ source: sourceId, target: n.id });
+        }
+      } catch {
+        // Ignore JSON parse issues here; invalid args are handled by run gating/inspector.
+      }
+    }
+    return refs;
+  }, [nodes]);
+  const refEdgeKey = useMemo(
+    () => refDependencyEdges.map((e) => `${e.source}->${e.target}`).sort().join("|"),
+    [refDependencyEdges],
+  );
   const nodeIdKey = useMemo(
     () => nodes.map((n) => n.id).sort().join("|"),
     [nodes],
   );
   const cycleIds = useMemo(
-    () => detectCycles(nodes.map((n) => n.id), edges),
+    () =>
+      detectCycles(
+        nodes.map((n) => n.id),
+        [
+          ...edges,
+          ...refDependencyEdges.map((e, idx) => ({
+            id: `ref-${idx}-${e.source}-${e.target}`,
+            source: e.source,
+            target: e.target,
+          })),
+        ],
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [nodeIdKey, edgeKey],
+    [nodeIdKey, edgeKey, refEdgeKey],
   );
 
   // Sync cycle status into node data only when the cycle set content changes,

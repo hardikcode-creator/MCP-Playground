@@ -1,6 +1,9 @@
 import type { ValueRef } from "../types";
 
 const REF_SHAPE_ERROR = "Invalid $ref shape: expected {$ref:{nodeId:string,path:string}}";
+const REF_SOURCE_MISSING_ERROR = "$ref source node not found in workflow:";
+const REF_OUTPUT_UNAVAILABLE_ERROR = "$ref source output not available yet:";
+const REF_PATH_MISSING_ERROR = "$ref path not found:";
 
 function parsePath(path: string): string[] {
   return path
@@ -30,36 +33,104 @@ export function getByPath(value: unknown, path: string): unknown {
   return current;
 }
 
-export function resolveValueRefs(
+function asRef(input: unknown): ValueRef["$ref"] | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const maybeRef = input as Record<string, unknown>;
+  if (!("$ref" in maybeRef) || !maybeRef.$ref || typeof maybeRef.$ref !== "object" || Array.isArray(maybeRef.$ref)) {
+    return null;
+  }
+  return maybeRef.$ref as ValueRef["$ref"];
+}
+
+export function collectValueRefNodeIds(value: unknown): string[] {
+  const ids = new Set<string>();
+  const walk = (input: unknown): void => {
+    if (Array.isArray(input)) {
+      for (const item of input) walk(item);
+      return;
+    }
+    if (!input || typeof input !== "object") return;
+    const ref = asRef(input);
+    if (ref) {
+      if (typeof ref.nodeId === "string") ids.add(ref.nodeId);
+      return;
+    }
+    for (const v of Object.values(input as Record<string, unknown>)) walk(v);
+  };
+  walk(value);
+  return [...ids];
+}
+
+export type RefResolutionErrorCode =
+  | "invalid_shape"
+  | "source_missing"
+  | "output_unavailable"
+  | "path_missing";
+
+export type RefResolutionError = {
+  code: RefResolutionErrorCode;
+  message: string;
+  nodeId?: string;
+  path?: string;
+};
+
+export function resolveValueRefsDetailed(
   value: unknown,
   getOutput: (nodeId: string) => unknown,
-): { value: unknown; errors: string[] } {
-  const errors: string[] = [];
+  hasNode?: (nodeId: string) => boolean,
+): { value: unknown; errors: RefResolutionError[] } {
+  const errors: RefResolutionError[] = [];
   const walk = (input: unknown): unknown => {
     if (Array.isArray(input)) return input.map(walk);
     if (!input || typeof input !== "object") return input;
-    const maybeRef = input as Record<string, unknown>;
-    if ("$ref" in maybeRef && maybeRef.$ref && typeof maybeRef.$ref === "object" && !Array.isArray(maybeRef.$ref)) {
-      const ref = maybeRef.$ref as ValueRef["$ref"];
+    const ref = asRef(input);
+    if (ref) {
       if (typeof ref.nodeId !== "string" || typeof ref.path !== "string") {
-        errors.push(REF_SHAPE_ERROR);
+        errors.push({ code: "invalid_shape", message: REF_SHAPE_ERROR });
         return null;
       }
       const source = getOutput(ref.nodeId);
       if (source === undefined) {
-        errors.push(`$ref source node not found in outputs: ${ref.nodeId}`);
+        if (hasNode && hasNode(ref.nodeId)) {
+          errors.push({
+            code: "output_unavailable",
+            nodeId: ref.nodeId,
+            path: ref.path,
+            message: `${REF_OUTPUT_UNAVAILABLE_ERROR} ${ref.nodeId}`,
+          });
+        } else {
+          errors.push({
+            code: "source_missing",
+            nodeId: ref.nodeId,
+            path: ref.path,
+            message: `${REF_SOURCE_MISSING_ERROR} ${ref.nodeId}`,
+          });
+        }
         return null;
       }
       const resolved = getByPath(source, ref.path);
       if (resolved === undefined) {
-        errors.push(`$ref path not found: ${ref.nodeId}.${ref.path}`);
+        errors.push({
+          code: "path_missing",
+          nodeId: ref.nodeId,
+          path: ref.path,
+          message: `${REF_PATH_MISSING_ERROR} ${ref.nodeId}.${ref.path}`,
+        });
         return null;
       }
       return resolved;
     }
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(maybeRef)) out[k] = walk(v);
+    for (const [k, v] of Object.entries(input as Record<string, unknown>)) out[k] = walk(v);
     return out;
   };
   return { value: walk(value), errors };
+}
+
+export function resolveValueRefs(
+  value: unknown,
+  getOutput: (nodeId: string) => unknown,
+): { value: unknown; errors: string[] } {
+  const result = resolveValueRefsDetailed(value, getOutput);
+  return { value: result.value, errors: result.errors.map((e) => e.message) };
 }

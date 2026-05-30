@@ -94,7 +94,6 @@ export const ToolNode = memo(function ToolNode({ id, data, selected }: NodeProps
     },
     [id, deleteElements],
   );
-
   return (
     <div
       className={`group relative flex w-[180px] flex-col gap-1 rounded-lg border p-2 shadow-lg transition-all duration-200 ${border} ${bg} ${opacity} ${
@@ -133,6 +132,13 @@ export const ToolNode = memo(function ToolNode({ id, data, selected }: NodeProps
 
       <div className="text-[10px] leading-snug text-zinc-500">
         {data.description}
+      </div>
+
+      <div
+        className="break-all rounded border border-zinc-800 bg-zinc-950/70 px-1.5 py-1 font-mono text-[9px] text-zinc-400"
+        title={id}
+      >
+        {id}
       </div>
 
       <Handle
