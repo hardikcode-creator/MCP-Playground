@@ -1,8 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { JsonSchema } from "../../types";
 import type { ArgMode } from "../../state/appState";
 import { applyParamValue, toParamRows } from "../../lib/schema";
+import { Braces } from "../../lib/icons";
 import { CodeEditor } from "../common/CodeEditor";
+import { ArgsJsonDialog } from "./ArgsJsonDialog";
 import { ParamField } from "./ParamField";
 
 // Postman-style args editor. Params and Raw are two views of the SAME args
@@ -13,16 +15,17 @@ export function ArgsInput({
   setArgsText,
   mode,
   setMode,
-  missingRequired = [],
+  invalidFields = [],
 }: {
   schema: JsonSchema;
   argsText: string;
   setArgsText: (text: string) => void;
   mode: ArgMode;
   setMode: (mode: ArgMode) => void;
-  missingRequired?: string[];
+  invalidFields?: string[];
 }) {
   const rows = useMemo(() => toParamRows(schema), [schema]);
+  const [jsonOpen, setJsonOpen] = useState(false);
 
   let obj: Record<string, unknown> = {};
   try {
@@ -54,9 +57,21 @@ export function ArgsInput({
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Arguments</span>
-        <div className="flex items-center gap-0.5 rounded-md bg-zinc-800/60 p-0.5">
-          {tab("params", "Params")}
-          {tab("raw", "Raw")}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setJsonOpen(true)}
+            title="Edit arguments as JSON"
+            aria-label="Edit arguments as JSON"
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-emerald-300"
+          >
+            <Braces />
+            JSON
+          </button>
+          <div className="flex items-center gap-0.5 rounded-md bg-zinc-800/60 p-0.5">
+            {tab("params", "Params")}
+            {tab("raw", "Raw")}
+          </div>
         </div>
       </div>
 
@@ -69,7 +84,9 @@ export function ArgsInput({
       ) : (
         <div className="flex flex-col gap-2.5">
           {rows.map((row) => {
-            const isMissing = missingRequired.includes(row.name);
+            const cur = obj[row.name];
+            const isEmpty = cur === undefined || cur === null || cur === "";
+            const isInvalid = invalidFields.includes(row.name);
             return (
               <div key={row.name} className="flex flex-col gap-1">
                 <div className="flex items-baseline gap-1.5">
@@ -80,19 +97,32 @@ export function ArgsInput({
                   ) : (
                     <span className="text-[10px] text-zinc-600">optional</span>
                   )}
-                  {isMissing && <span className="text-[10px] text-red-400">needs a value</span>}
+                  {isInvalid && (
+                    <span className="text-[10px] text-red-400">
+                      {row.required && isEmpty ? "needs a value" : "invalid"}
+                    </span>
+                  )}
                 </div>
                 {row.description && <p className="text-[11px] text-zinc-500">{row.description}</p>}
                 <ParamField
                   def={row}
                   value={obj[row.name]}
-                  invalid={isMissing}
+                  invalid={isInvalid}
                   onChange={(next) => setField(row.name, next)}
                 />
               </div>
             );
           })}
         </div>
+      )}
+
+      {jsonOpen && (
+        <ArgsJsonDialog
+          schema={schema}
+          value={argsText}
+          onChange={setArgsText}
+          onClose={() => setJsonOpen(false)}
+        />
       )}
     </div>
   );

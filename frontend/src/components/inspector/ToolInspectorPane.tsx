@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useAppState } from "../../state/appState";
 import { Chevron, Play, Spinner } from "../../lib/icons";
-import { findMissingRequired } from "../../lib/schema";
+import { validateArgs } from "../../lib/schema";
 import { ArgsInput } from "./ArgsInput";
 import { ResponseViewer } from "./ResponseViewer";
 
@@ -17,25 +17,18 @@ export function ToolInspectorPane({ onCollapse }: { onCollapse?: () => void }) {
     latestRunForSelected,
   } = useAppState();
 
-  const { argsError, missingRequired } = useMemo(() => {
-    const empty = { argsError: null as string | null, missingRequired: [] as string[] };
-    if (!selectedDescriptor) return empty;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(argsText || "{}");
-    } catch {
-      return { ...empty, argsError: "Arguments are not valid JSON." };
+  const { blocked, invalidFields, issueText } = useMemo(() => {
+    if (!selectedDescriptor) {
+      return { blocked: false, invalidFields: [] as string[], issueText: null as string | null };
     }
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      return { ...empty, argsError: "Arguments must be a JSON object." };
-    }
-    return {
-      argsError: null as string | null,
-      missingRequired: findMissingRequired(selectedDescriptor.inputSchema, parsed as Record<string, unknown>),
-    };
+    const v = validateArgs(selectedDescriptor.inputSchema, argsText);
+    if (v.ok) return { blocked: false, invalidFields: [] as string[], issueText: null as string | null };
+    const invalidFields = v.errors.map((e) => e.path).filter((p) => p !== "(root)");
+    const first = v.errors[0];
+    const head = first.path === "(root)" ? first.message : `${first.path} ${first.message}`;
+    const issueText = v.errors.length === 1 ? head : `Fix ${v.errors.length} issues — ${head}`;
+    return { blocked: true, invalidFields, issueText };
   }, [selectedDescriptor, argsText]);
-
-  const blocked = argsError !== null || missingRequired.length > 0;
 
   return (
     <section className="flex h-full flex-col border-l border-zinc-800 bg-zinc-900">
@@ -75,17 +68,13 @@ export function ToolInspectorPane({ onCollapse }: { onCollapse?: () => void }) {
                 setArgsText={setArgsText}
                 mode={argMode}
                 setMode={setArgMode}
-                missingRequired={missingRequired}
+                invalidFields={invalidFields}
               />
-              {argsError ? (
-                <span className="text-xs text-red-400">{argsError}</span>
-              ) : missingRequired.length > 0 ? (
-                <span className="text-xs text-red-400">
-                  Fill the required field{missingRequired.length === 1 ? "" : "s"} highlighted above to run.
-                </span>
+              {issueText ? (
+                <span className="text-xs text-red-400">{issueText}</span>
               ) : (
                 <span className="text-xs text-zinc-500">
-                  Params build the args for you · switch to Raw for full control.
+                  Params build the args for you · switch to Raw or JSON for full control.
                 </span>
               )}
             </div>
@@ -114,13 +103,7 @@ export function ToolInspectorPane({ onCollapse }: { onCollapse?: () => void }) {
                 )}
               </button>
               <span className="font-mono text-xs text-zinc-500 transition-colors group-hover:text-zinc-300">
-                {running
-                  ? "Running…"
-                  : argsError
-                    ? "Fix args to run"
-                    : missingRequired.length > 0
-                      ? `Fill required: ${missingRequired.join(", ")}`
-                      : "Run Tool"}
+                {running ? "Running…" : blocked ? "Fix args to run" : "Run Tool"}
               </span>
             </div>
 
