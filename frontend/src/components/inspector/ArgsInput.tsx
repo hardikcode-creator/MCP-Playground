@@ -2,12 +2,35 @@ import { useMemo, useState } from "react";
 import type { JsonSchema, ToolResult } from "../../types";
 import type { ArgMode } from "../../state/appState";
 import { applyParamValue, toParamRows } from "../../lib/schema";
+import type { ParamRow } from "../../lib/schema";
+import { formatJson } from "../../lib/jsonTokens";
 import { Braces } from "../../lib/icons";
 import { CodeEditor } from "../common/CodeEditor";
 import { ArgsJsonDialog } from "./ArgsJsonDialog";
 import { RefPickerModal } from "./RefPickerModal";
 import { ParamField } from "./ParamField";
 import type { ValueRef } from "../../types";
+
+// Best-effort type for an arg value that isn't declared in the tool schema, so
+// it can still render a sensible Params control. A `$ref` wrapper is treated
+// loosely (the ref UI takes over when refs are enabled).
+function inferParamType(value: unknown): string {
+  if (value && typeof value === "object" && !Array.isArray(value) && "$ref" in (value as Record<string, unknown>)) {
+    return "string";
+  }
+  if (Array.isArray(value)) return "array";
+  if (value === null) return "string";
+  switch (typeof value) {
+    case "number":
+      return "number";
+    case "boolean":
+      return "boolean";
+    case "object":
+      return "object";
+    default:
+      return "string";
+  }
+}
 
 // Postman-style args editor. Params and Raw are two views of the SAME args
 // object: editing either one rewrites argsText so they stay in sync. When
@@ -24,6 +47,7 @@ export function ArgsInput({
   refNodeOptions = [],
   currentNodeId,
   getNodeResult,
+  historyKey,
 }: {
   schema: JsonSchema;
   argsText: string;
@@ -35,10 +59,13 @@ export function ArgsInput({
   refNodeOptions?: Array<{ id: string; label: string; tool?: string }>;
   currentNodeId?: string;
   getNodeResult?: (nodeId: string) => ToolResult | null;
+  historyKey?: string | number;
 }) {
   const rows = useMemo(() => toParamRows(schema), [schema]);
   const [jsonOpen, setJsonOpen] = useState(false);
   const [pickerField, setPickerField] = useState<string | null>(null);
+  const formattedArgs = useMemo(() => formatJson(argsText), [argsText]);
+  const canFormatArgs = formattedArgs !== null && formattedArgs !== argsText;
 
   let obj: Record<string, unknown> = {};
   try {
@@ -50,8 +77,18 @@ export function ArgsInput({
     // Raw text isn't valid JSON yet — the Params view falls back to empty.
   }
 
+  // Surface any arg keys that aren't declared in the tool schema (imported
+  // workflows, refs, or schema drift) so the Params view never silently hides
+  // values that are present in the JSON.
+  const schemaNames = new Set(rows.map((r) => r.name));
+  const extraRows: ParamRow[] = Object.keys(obj)
+    .filter((name) => !schemaNames.has(name))
+    .map((name) => ({ name, type: inferParamType(obj[name]), required: false }));
+  const extraNames = new Set(extraRows.map((r) => r.name));
+  const allRows = [...rows, ...extraRows];
+
   const setField = (name: string, next: unknown) => {
-    setArgsText(JSON.stringify(applyParamValue(obj, rows, name, next), null, 2));
+    setArgsText(JSON.stringify(applyParamValue(obj, allRows, name, next), null, 2));
   };
   const readRef = (value: unknown): ValueRef["$ref"] | null => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -80,6 +117,20 @@ export function ArgsInput({
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Arguments</span>
         <div className="flex items-center gap-1.5">
+          {mode === "raw" && (
+            <button
+              type="button"
+              onClick={() => {
+                if (formattedArgs) setArgsText(formattedArgs);
+              }}
+              disabled={!canFormatArgs}
+              title="Format JSON (⇧⌥F)"
+              aria-label="Format JSON"
+              className="inline-flex items-center rounded-md px-1.5 py-1 text-xs text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-zinc-400"
+            >
+              Format
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setJsonOpen(true)}
@@ -98,14 +149,20 @@ export function ArgsInput({
       </div>
 
       {mode === "raw" ? (
-        <CodeEditor value={argsText} onChange={setArgsText} ariaLabel="Raw JSON arguments" minHeight={176} />
-      ) : rows.length === 0 ? (
+        <CodeEditor
+          value={argsText}
+          onChange={setArgsText}
+          ariaLabel="Raw JSON arguments"
+          minHeight={176}
+          historyKey={historyKey}
+        />
+      ) : allRows.length === 0 ? (
         <p className="rounded-md border border-zinc-800 bg-zinc-950 px-2.5 py-2 text-xs text-zinc-500">
           This tool takes no arguments.
         </p>
       ) : (
         <div className="flex flex-col gap-2.5">
-          {rows.map((row) => {
+          {allRows.map((row) => {
             const cur = obj[row.name];
             const isEmpty = cur === undefined || cur === null || cur === "";
             const isInvalid = invalidFields.includes(row.name);
@@ -120,6 +177,14 @@ export function ArgsInput({
                     <span className="text-[10px] font-medium text-red-400">required</span>
                   ) : (
                     <span className="text-[10px] text-zinc-600">optional</span>
+                  )}
+                  {extraNames.has(row.name) && (
+                    <span
+                      className="text-[10px] text-amber-400/80"
+                      title="This key isn't declared in the tool's input schema"
+                    >
+                      not in schema
+                    </span>
                   )}
                   {isInvalid && (
                     <span className="text-[10px] text-red-400">
@@ -251,6 +316,7 @@ export function ArgsInput({
               sourceTool={refNodeOptions.find((o) => o.id === nodeId)?.tool}
               result={getNodeResult && nodeId ? getNodeResult(nodeId) : null}
               currentPath={ref?.path ?? "$"}
+              expectedType={allRows.find((r) => r.name === pickerField)?.type}
               onPick={(p) => {
                 setField(pickerField, { $ref: { nodeId, path: p } });
                 setPickerField(null);

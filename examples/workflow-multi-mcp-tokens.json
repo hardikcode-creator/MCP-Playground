@@ -1,0 +1,126 @@
+{
+  "id": "multi-mcp-tokens-20",
+  "version": 1,
+  "name": "Full-stack multi-MCP (everything + zomato + github) 20-node DAG: env-var server (GITHUB_PERSONAL_ACCESS_TOKEN), cross-server $refs, 5 breakpoints. Requires github connected with a free PAT.",
+  "nodes": [
+    {
+      "id": "start",
+      "tool": "everything__echo",
+      "args": { "message": "Dev-team lunch & research kickoff" },
+      "breakpoint": true
+    },
+    {
+      "id": "addr",
+      "tool": "zomato-mcp__get_saved_addresses_for_user",
+      "args": {},
+      "breakpoint": true
+    },
+    {
+      "id": "gh_mcp",
+      "tool": "github__search_repositories",
+      "args": { "query": "model context protocol", "perPage": 5 }
+    },
+    {
+      "id": "gh_servers",
+      "tool": "github__search_repositories",
+      "args": { "query": "topic:mcp mcp server", "perPage": 5 }
+    },
+    {
+      "id": "gh_code",
+      "tool": "github__search_code",
+      "args": { "q": "StdioClientTransport language:typescript", "per_page": 3 }
+    },
+    {
+      "id": "s_pizza",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "pizza",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "s_sushi",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "sushi",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "s_biryani",
+      "tool": "zomato-mcp__get_restaurants_for_keyword",
+      "args": {
+        "keyword": "biryani",
+        "address_id": { "$ref": { "nodeId": "addr", "path": "$.structuredContent.result.addresses[0].address_id" } }
+      },
+      "dependsOn": ["addr"]
+    },
+    {
+      "id": "v_mcp",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "gh_mcp", "path": "$.content[0].text" } } },
+      "breakpoint": true
+    },
+    {
+      "id": "v_servers",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "gh_servers", "path": "$.content[0].text" } } }
+    },
+    {
+      "id": "v_code",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "gh_code", "path": "$.content[0].text" } } }
+    },
+    {
+      "id": "v_pizza",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "s_pizza", "path": "$.content[0].text" } } }
+    },
+    {
+      "id": "v_sushi",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "s_sushi", "path": "$.content[0].text" } } }
+    },
+    {
+      "id": "v_biryani",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "s_biryani", "path": "$.content[0].text" } } }
+    },
+    {
+      "id": "tally",
+      "tool": "everything__get-sum",
+      "args": { "a": 5, "b": 3 }
+    },
+    {
+      "id": "addr_view",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "addr", "path": "$.content[0].text" } } }
+    },
+    {
+      "id": "digest",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "v_mcp", "path": "$.content[0].text" } } },
+      "dependsOn": ["v_servers", "v_code", "v_pizza", "v_sushi", "v_biryani", "tally"]
+    },
+    {
+      "id": "plan",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "digest", "path": "$.content[0].text" } } },
+      "dependsOn": ["addr_view"],
+      "breakpoint": true
+    },
+    {
+      "id": "notify",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "plan", "path": "$.content[0].text" } } }
+    },
+    {
+      "id": "done",
+      "tool": "everything__echo",
+      "args": { "message": { "$ref": { "nodeId": "notify", "path": "$.content[0].text" } } },
+      "breakpoint": true
+    }
+  ]
+}

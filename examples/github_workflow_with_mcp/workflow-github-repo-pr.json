@@ -1,0 +1,119 @@
+{
+  "id": "github-repo-to-pr",
+  "version": 1,
+  "name": "GitHub end-to-end: create repo → seed default branch (initial commit) → branch → commit → list commits → open/inspect/merge PR. Cross-node $refs (repo name, owner, PR number as integer) + 5 breakpoints.",
+  "nodes": [
+    {
+      "id": "create_repo",
+      "tool": "github__create_repository",
+      "args": {
+        "name": "mcp-playground-demo",
+        "description": "Demo repository created from an MCP Playground workflow",
+        "private": false,
+        "autoInit": false
+      },
+      "breakpoint": true
+    },
+    {
+      "id": "list_all_repos",
+      "tool": "github__search_repositories",
+      "args": { "query": "user:octo-demo", "perPage": 10 },
+      "dependsOn": ["create_repo"]
+    },
+    {
+      "id": "find_new_repo",
+      "tool": "github__search_repositories",
+      "args": {
+        "query": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.name" } },
+        "perPage": 5
+      },
+      "dependsOn": ["create_repo"]
+    },
+    {
+      "id": "seed_main",
+      "tool": "github__create_or_update_file",
+      "args": {
+        "owner": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.owner.login" } },
+        "repo": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.name" } },
+        "path": "README.md",
+        "content": "# mcp-playground-demo\n\nInitial commit created by the MCP Playground workflow so the default branch has a base to branch from.\n",
+        "message": "Initial commit (seed default branch)",
+        "branch": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.default_branch" } }
+      },
+      "dependsOn": ["create_repo"]
+    },
+    {
+      "id": "create_branch",
+      "tool": "github__create_branch",
+      "args": {
+        "owner": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.owner.login" } },
+        "repo": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.name" } },
+        "branch": "feature/welcome",
+        "from_branch": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.default_branch" } }
+      },
+      "dependsOn": ["seed_main"],
+      "breakpoint": true
+    },
+    {
+      "id": "commit_file",
+      "tool": "github__create_or_update_file",
+      "args": {
+        "owner": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.owner.login" } },
+        "repo": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.name" } },
+        "path": "WELCOME.md",
+        "content": "# Welcome\n\nThis file was committed by an MCP Playground workflow.\n",
+        "message": "Add WELCOME.md via MCP Playground",
+        "branch": "feature/welcome"
+      },
+      "dependsOn": ["create_branch"]
+    },
+    {
+      "id": "list_commits",
+      "tool": "github__list_commits",
+      "args": {
+        "owner": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.owner.login" } },
+        "repo": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.name" } },
+        "perPage": 5
+      },
+      "dependsOn": ["commit_file"],
+      "breakpoint": true
+    },
+    {
+      "id": "open_pr",
+      "tool": "github__create_pull_request",
+      "args": {
+        "owner": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.owner.login" } },
+        "repo": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.name" } },
+        "title": "Add WELCOME.md",
+        "body": "Opening a pull request from the MCP Playground workflow demo.",
+        "head": "feature/welcome",
+        "base": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.default_branch" } }
+      },
+      "dependsOn": ["commit_file", "list_commits"],
+      "breakpoint": true
+    },
+    {
+      "id": "inspect_pr",
+      "tool": "github__get_pull_request",
+      "args": {
+        "owner": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.owner.login" } },
+        "repo": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.name" } },
+        "pull_number": { "$ref": { "nodeId": "open_pr", "path": "$.structuredContent.number" } }
+      },
+      "dependsOn": ["open_pr"],
+      "breakpoint": true
+    },
+    {
+      "id": "merge_pr",
+      "tool": "github__merge_pull_request",
+      "args": {
+        "owner": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.owner.login" } },
+        "repo": { "$ref": { "nodeId": "create_repo", "path": "$.structuredContent.name" } },
+        "pull_number": { "$ref": { "nodeId": "open_pr", "path": "$.structuredContent.number" } },
+        "merge_method": "squash",
+        "commit_title": "Add WELCOME.md (#1)"
+      },
+      "dependsOn": ["inspect_pr"]
+    }
+  ]
+}

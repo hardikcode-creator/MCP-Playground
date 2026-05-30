@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from "react";
-import type { ClipboardEvent, DragEvent, MouseEvent, ReactNode } from "react";
+import type { ClipboardEvent, DragEvent, ReactNode } from "react";
 import { useAppState } from "../state/appState";
 import { validateConfig } from "../data/config";
+import { formatJson } from "../lib/jsonTokens";
 import { CodeEditor } from "./common/CodeEditor";
 import { FootballPitch } from "./home/FootballPitch";
 
@@ -51,6 +52,25 @@ function UploadGlyph() {
   );
 }
 
+function PasteGlyph() {
+  return (
+    <svg
+      width={15}
+      height={15}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="8" y="3" width="8" height="4" rx="1" />
+      <path d="M16 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2" />
+    </svg>
+  );
+}
+
 function Feature({ icon, title, desc }: { icon: ReactNode; title: string; desc: string }) {
   return (
     <div className="group flex flex-col items-start gap-2 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 text-left transition-all duration-200 ease-spring hover:-translate-y-0.5 hover:border-emerald-500/40 hover:bg-zinc-900/70">
@@ -95,28 +115,21 @@ const FEATURES = [
   },
 ];
 
-// Pretty-print if the text is valid JSON; otherwise return null (leave as-is).
-function prettyJson(text: string): string | null {
-  try {
-    return JSON.stringify(JSON.parse(text), null, 2);
-  } catch {
-    return null;
-  }
-}
-
 function PasteModal({
   initial,
+  title = "Paste mcp-config.json",
   onCancel,
   onUse,
 }: {
   initial: string;
+  title?: string;
   onCancel: () => void;
   onUse: (text: string) => void;
 }) {
   const [draft, setDraft] = useState(initial);
   const result = validateConfig(draft);
   const hasText = draft.trim().length > 0;
-  const formatted = prettyJson(draft);
+  const formatted = formatJson(draft);
   const canFormat = formatted !== null && formatted !== draft;
 
   // Auto-format on paste: splice the pasted text into the current selection,
@@ -129,7 +142,7 @@ function PasteModal({
     const start = el.selectionStart ?? draft.length;
     const end = el.selectionEnd ?? draft.length;
     const next = draft.slice(0, start) + pasted + draft.slice(end);
-    setDraft(prettyJson(next) ?? next);
+    setDraft(formatJson(next) ?? next);
   };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm" onClick={onCancel}>
@@ -138,7 +151,7 @@ function PasteModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-sm font-semibold text-zinc-100">Paste mcp-config.json</h2>
+          <h2 className="font-display text-sm font-semibold text-zinc-100">{title}</h2>
           <button type="button" onClick={onCancel} className="rounded-md px-2 py-1 text-sm text-zinc-400 hover:bg-zinc-800">
             Close
           </button>
@@ -150,7 +163,7 @@ function PasteModal({
           autoFocus
           ariaLabel="Paste mcp-config.json"
           minHeight={288}
-          placeholder={'{\n  "servers": [\n    { "name": "filesystem", "command": "npx", "args": ["..."] }\n  ]\n}'}
+          placeholder={'{\n  "mcpServers": {\n    "filesystem": { "command": "npx", "args": ["..."] }\n  }\n}'}
         />
         {hasText &&
           (result.ok ? (
@@ -225,14 +238,6 @@ export default function HomePage() {
     if (file) readFile(file);
   }
 
-  // The dropzone is a click target itself (opens the file picker), so the
-  // inline "paste JSON" affordance has to swallow the click before it bubbles
-  // up to the parent. Same for keyboard activation.
-  function openPaste(e: MouseEvent<HTMLButtonElement>) {
-    e.stopPropagation();
-    setPasteOpen(true);
-  }
-
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#0d1f14] text-zinc-100">
       <HomeBackground />
@@ -279,7 +284,7 @@ export default function HomePage() {
             <div
               role="button"
               tabIndex={0}
-              aria-label="Upload mcp-config.json: click to browse, drop a file, or paste JSON"
+              aria-label="Upload mcp-config.json: click to browse or drop a file"
               onClick={() => fileRef.current?.click()}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
@@ -303,16 +308,8 @@ export default function HomePage() {
                 <UploadGlyph />
               </div>
               <p className="text-sm text-zinc-300">
-                Drag and drop your <span className="font-mono text-emerald-300">mcp-config.json</span>,{" "}
-                <span className="font-medium text-emerald-300">click to browse</span>, or{" "}
-                <button
-                  type="button"
-                  onClick={openPaste}
-                  className="font-medium text-emerald-300 underline decoration-emerald-500/60 decoration-dotted underline-offset-2 transition-colors hover:text-emerald-200 hover:decoration-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60"
-                >
-                  paste JSON
-                </button>
-                .
+                Drag and drop your JSON file or{" "}
+                <span className="font-medium text-emerald-300">click to browse</span>.
               </p>
               <input
                 ref={fileRef}
@@ -327,6 +324,24 @@ export default function HomePage() {
               />
             </div>
 
+            {/* Paste JSON gets its own significant action under the dropzone,
+                separated by an "or" rule, instead of a buried inline link. */}
+            <div className="mt-3 flex items-center gap-3" aria-hidden="true">
+              <span className="h-px flex-1 bg-white/[0.08]" />
+              <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-zinc-500">or</span>
+              <span className="h-px flex-1 bg-white/[0.08]" />
+            </div>
+            <button
+              type="button"
+              onClick={() => setPasteOpen(true)}
+              className="group mt-3 flex w-full cursor-pointer items-center justify-center gap-2.5 rounded-xl border border-zinc-700 bg-zinc-950/50 px-4 py-3 text-sm font-medium text-zinc-300 transition-all duration-300 ease-spring hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-zinc-900/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+            >
+              <span className="text-emerald-300 transition-transform duration-300 ease-spring group-hover:-translate-y-0.5">
+                <PasteGlyph />
+              </span>
+              Paste config JSON
+            </button>
+
             {hasConfig && (
               <div className="mt-4 flex flex-col gap-3">
                 {result.ok ? (
@@ -336,13 +351,22 @@ export default function HomePage() {
                       {result.config.servers.length} server{result.config.servers.length === 1 ? "" : "s"} ready to
                       connect
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setConfigText("")}
-                      className="rounded-md px-2 py-1 text-xs text-zinc-400 transition-colors hover:bg-zinc-800/70 hover:text-zinc-200"
-                    >
-                      Clear
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setPasteOpen(true)}
+                        className="rounded-md border border-emerald-700/50 px-2 py-1 text-xs font-medium text-emerald-300 transition-colors hover:border-emerald-500 hover:bg-emerald-900/40"
+                      >
+                        View config
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfigText("")}
+                        className="rounded-md px-2 py-1 text-xs text-zinc-400 transition-colors hover:bg-zinc-800/70 hover:text-zinc-200"
+                      >
+                        Clear
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="rounded-xl border border-red-900/60 bg-red-950/30 p-3.5">
@@ -403,6 +427,7 @@ export default function HomePage() {
       {pasteOpen && (
         <PasteModal
           initial={configText}
+          title={hasConfig ? "Your mcp-config.json" : "Paste mcp-config.json"}
           onCancel={() => setPasteOpen(false)}
           onUse={(text) => {
             setConfigText(text);

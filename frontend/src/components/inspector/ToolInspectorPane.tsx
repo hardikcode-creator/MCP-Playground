@@ -55,13 +55,16 @@ export function ToolInspectorPane({
     setArgsText(text);
   };
 
-  // For PATH PICKING only: the response *structure* (so you can choose a JSONPath)
-  // comes from running the source node's TOOL standalone in the inspector. The
-  // resolved *values* still flow from the node's own output (see preview below).
+  // For PATH PICKING: prefer the source node's OWN run output (persisted on the
+  // node after a workflow run) so suggested paths match exactly what that node
+  // actually returned. Only when the node hasn't run yet do we fall back to a
+  // standalone tool sample captured in the inspector. Either way, resolved
+  // *values* always flow from the node's own output (see live preview below).
   const nodeStructureSample = useCallback(
     (nodeId: string): ToolResult | null => {
       const n = workflow?.getNodeById(nodeId);
-      return n ? getToolResult(n.data.qualifiedName) : null;
+      if (!n) return null;
+      return n.data.lastResult ?? getToolResult(n.data.qualifiedName);
     },
     [workflow, getToolResult],
   );
@@ -209,6 +212,7 @@ export function ToolInspectorPane({
                 refNodeOptions={refNodeOptions}
                 currentNodeId={selectedWorkflowNode?.id}
                 getNodeResult={nodeStructureSample}
+                historyKey={`${selectedWorkflowNode?.id ?? "tool"}::${selectedDescriptor.qualifiedName}`}
               />
               {issueText ? (
                 <span className="text-xs text-red-400">{issueText}</span>
@@ -318,7 +322,6 @@ export function ToolInspectorPane({
                   {latestRun && !runningState && !selectedWorkflowNode ? (
                     <span className="text-[10px] text-zinc-600">{latestRun.durationMs}ms</span>
                   ) : null}
-                  <span className="text-[10px] text-zinc-600">raw JSON</span>
                 </div>
               </div>
               <ResponseViewer run={latestRun} running={runningState} />

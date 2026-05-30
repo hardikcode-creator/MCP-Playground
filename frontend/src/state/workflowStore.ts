@@ -15,10 +15,10 @@ import type {
 import type { NodeStatus, ToolDescriptor, ToolResult } from "../types";
 import { seedArgs } from "../lib/schema";
 import { serializeWorkflow } from "../lib/workflow/serialize";
-import { LocalWorkflowRunner } from "../data/mcpClient";
-import type { CallToolFn } from "../data/mcpClient";
+import { createWorkflowRunner } from "../data/mcpClient";
+import type { CallToolFn, WorkflowRunner } from "../data/mcpClient";
 import type { PauseHandler } from "../lib/workflow/executor";
-import type { EngineEvent, PauseAction, Workflow } from "../lib/workflow/types";
+import type { EngineEvent, PauseAction, Workflow, WorkflowRunResult, WorkflowStatus } from "../lib/workflow/types";
 
 export type ToolNodeData = {
   qualifiedName: string;
@@ -39,7 +39,18 @@ export type WorkflowState = {
   edges: Edge[];
   workflowRunning: boolean;
   cycleNodeIds: string[];
+  // Run-level error surfaced from the runner: backend validation/cycle rejects
+  // (server `error` frame) or a dropped socket. Null while healthy.
+  lastRunError: string | null;
+  // Terminal status of the most recent finished run, and its full result
+  // (steps with each node's output). Both null until a run completes; reset
+  // when a new run starts or the canvas is cleared/imported.
+  lastRunStatus: WorkflowStatus | null;
+  lastRunResult: WorkflowRunResult | null;
   addNode: (tool: ToolDescriptor, position: { x: number; y: number }) => void;
+  // Replace the whole canvas with an imported workflow (built by
+  // deserializeWorkflow). Resets run state and seeds id counters.
+  importWorkflow: (nodes: Node<ToolNodeData>[], edges: Edge[]) => void;
   onNodesChange: OnNodesChange<Node<ToolNodeData>>;
   onEdgesChange: OnEdgesChange;
   onConnect: OnConnect;
@@ -51,6 +62,11 @@ export type WorkflowState = {
   setCycleNodeIds: (ids: string[]) => void;
   resetStatuses: () => void;
   runWorkflow: (callTool: CallToolFn) => Promise<void>;
+  // Resume a failed run: keep results of already-completed nodes and re-run
+  // only the failed node and everything downstream of it.
+  retryWorkflow: (callTool: CallToolFn) => Promise<void>;
+  // True when a prior run left a failed node (so the canvas can offer a retry).
+  canRetry: boolean;
   cancelWorkflow: () => void;
   // Debugger actions for a node paused at a breakpoint.
   resumeNode: (nodeId: string) => void;
@@ -69,6 +85,9 @@ export function useWorkflowStore(): WorkflowState {
   const [edges, setEdges] = useState<Edge[]>([]);
   const [workflowRunning, setWorkflowRunning] = useState(false);
   const [cycleNodeIds, setCycleNodeIdsState] = useState<string[]>([]);
+  const [lastRunError, setLastRunError] = useState<string | null>(null);
+  const [lastRunStatus, setLastRunStatus] = useState<WorkflowStatus | null>(null);
+  const [lastRunResult, setLastRunResult] = useState<WorkflowRunResult | null>(null);
   const nodeIdCounterByToolRef = useRef<Record<string, number>>({});
 
   // Mirrors of the latest state, read inside callbacks/event handlers (which
@@ -86,6 +105,9 @@ export function useWorkflowStore(): WorkflowState {
   // paused at a breakpoint (keyed by nodeId), each with a snapshot of the args
   // at pause time so we can tell continue from continue-with-args.
   const abortRef = useRef<AbortController | null>(null);
+  // The runner for the in-flight run, so a breakpoint toggled on the fly can be
+  // forwarded to the live executor (local) or sent as a control frame (socket).
+  const runnerRef = useRef<WorkflowRunner | null>(null);
   const pendingPausesRef = useRef<Map<string, { resolve: (a: PauseAction) => void; argsSnapshot: string }>>(
     new Map(),
   );
@@ -113,6 +135,35 @@ export function useWorkflowStore(): WorkflowState {
     setNodes((nds) => [...nds, newNode]);
   }, []);
 
+  const importWorkflow = useCallback((newNodes: Node<ToolNodeData>[], newEdges: Edge[]) => {
+    // Stop any in-flight run and clear all run/pause state before swapping.
+    abortRef.current?.abort();
+    abortRef.current = null;
+    pendingPausesRef.current.clear();
+    setWorkflowRunning(false);
+    setLastRunError(null);
+    setLastRunStatus(null);
+    setLastRunResult(null);
+    setCycleNodeIdsState([]);
+
+    // Seed the per-tool id counter from imported ids that follow addNode's
+    // `${qualifiedName}-${n}` pattern, so later drags don't collide.
+    const counters: Record<string, number> = {};
+    for (const n of newNodes) {
+      const prefix = `${n.data.qualifiedName}-`;
+      if (n.id.startsWith(prefix)) {
+        const rest = n.id.slice(prefix.length);
+        if (/^\d+$/.test(rest)) {
+          counters[n.data.qualifiedName] = Math.max(counters[n.data.qualifiedName] ?? 0, Number(rest));
+        }
+      }
+    }
+    nodeIdCounterByToolRef.current = counters;
+
+    setNodes(newNodes);
+    setEdges(newEdges);
+  }, []);
+
   const onNodesChange: OnNodesChange<Node<ToolNodeData>> = useCallback(
     (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
     [],
@@ -132,6 +183,9 @@ export function useWorkflowStore(): WorkflowState {
     setNodes([]);
     setEdges([]);
     nodeIdCounterByToolRef.current = {};
+    setLastRunError(null);
+    setLastRunStatus(null);
+    setLastRunResult(null);
   }, []);
 
   const setNodeStatus = useCallback((nodeId: string, status: NodeStatus) => {
@@ -142,11 +196,52 @@ export function useWorkflowStore(): WorkflowState {
     setNodes((nds) => nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, argsText } } : n)));
   }, []);
 
-  const toggleBreakpoint = useCallback((nodeId: string) => {
-    setNodes((nds) =>
-      nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, breakpoint: !n.data.breakpoint } } : n)),
-    );
+  // Resolve a node currently paused at a breakpoint: apply edited args if the
+  // user changed them (continue-with-args), otherwise a plain continue. Shared
+  // by the Resume button and by removing a breakpoint on an already-paused node.
+  const continuePausedNode = useCallback((nodeId: string) => {
+    const entry = pendingPausesRef.current.get(nodeId);
+    if (!entry) return;
+    pendingPausesRef.current.delete(nodeId);
+    const node = nodesRef.current.find((n) => n.id === nodeId);
+    const currentText = node?.data.argsText ?? "";
+    if (currentText !== entry.argsSnapshot) {
+      try {
+        const parsed = JSON.parse(currentText || "{}");
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          entry.resolve({ type: "continue-with-args", args: parsed as Record<string, unknown> });
+          return;
+        }
+      } catch {
+        // Fall through to a plain continue if the edit isn't valid JSON.
+      }
+    }
+    entry.resolve({ type: "continue" });
   }, []);
+
+  const toggleBreakpoint = useCallback(
+    (nodeId: string) => {
+      const node = nodesRef.current.find((n) => n.id === nodeId);
+      const next = !(node?.data.breakpoint ?? false);
+      setNodes((nds) =>
+        nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, breakpoint: next } } : n)),
+      );
+      // Nothing live to mirror unless a run is in flight.
+      if (!abortRef.current || !runnerRef.current) return;
+      if (next) {
+        runnerRef.current.setBreakpoint(nodeId);
+        return;
+      }
+      // Removing a breakpoint must be honored in BOTH cases:
+      //  1. node hasn't reached the breakpoint yet -> clear it on the engine so
+      //     it won't pause (the authored flag was snapshotted at launch).
+      //  2. node is ALREADY paused here -> let it continue now, otherwise it
+      //     would sit paused with no breakpoint left to resume.
+      runnerRef.current.clearBreakpoint(nodeId);
+      if (pendingPausesRef.current.has(nodeId)) continuePausedNode(nodeId);
+    },
+    [continuePausedNode],
+  );
 
   const getNodeById = useCallback((nodeId: string) => nodes.find((n) => n.id === nodeId), [nodes]);
 
@@ -223,14 +318,33 @@ export function useWorkflowStore(): WorkflowState {
     }
   }, [setNodeStatus]);
 
-  const runWorkflow = useCallback(
-    async (callTool: CallToolFn) => {
+  // Shared run path for both a fresh run and a resume. When `seedResults` is
+  // passed, the already-completed nodes it names are kept (their statuses and
+  // results stay on the canvas) and everything else is cleared so it re-runs;
+  // the seed also flows to the executor so downstream $refs resolve.
+  const beginRun = useCallback(
+    async (callTool: CallToolFn, seedResults?: Record<string, unknown>) => {
       // Serialize the current canvas to the backend's Workflow shape BEFORE
       // resetting statuses (reset only clears run state, not args).
       const workflow = serializeWorkflow(nodesRef.current, edgesRef.current);
       if (workflow.nodes.length === 0) return;
 
-      resetStatuses();
+      if (seedResults) {
+        const seededIds = new Set(Object.keys(seedResults));
+        setCycleNodeIdsState([]);
+        setNodes((nds) =>
+          nds.map((n) =>
+            seededIds.has(n.id)
+              ? n
+              : { ...n, data: { ...n.data, status: "idle" as NodeStatus, lastResult: null } },
+          ),
+        );
+      } else {
+        resetStatuses();
+      }
+      setLastRunError(null);
+      setLastRunStatus(null);
+      setLastRunResult(null);
       pendingPausesRef.current.clear();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -247,20 +361,55 @@ export function useWorkflowStore(): WorkflowState {
           }),
       };
 
-      const runner = new LocalWorkflowRunner(callTool);
+      const runner = createWorkflowRunner(callTool);
+      runnerRef.current = runner;
       try {
-        await runner.run(workflow, { onEvent: handleEngineEvent, pauseHandler, signal: controller.signal });
+        const result = await runner.run(workflow, {
+          onEvent: handleEngineEvent,
+          pauseHandler,
+          signal: controller.signal,
+          seedResults,
+        });
+        // Capture the finished run so the canvas can show a terminal status
+        // chip and offer a "Save response" download.
+        setLastRunResult(result);
+        setLastRunStatus(result.status);
       } catch (err) {
-        // Validation / cycle errors throw before any node runs.
-        console.error("[workflow] run failed:", (err as Error).message);
+        // Validation / cycle errors (local or from the backend `error` frame),
+        // or a dropped socket — surface to the canvas instead of only logging.
+        const message = (err as Error).message;
+        console.error("[workflow] run failed:", message);
+        setLastRunError(message);
       } finally {
         setWorkflowRunning(false);
         abortRef.current = null;
+        runnerRef.current = null;
         pendingPausesRef.current.clear();
       }
     },
     [resetStatuses, handleEngineEvent],
   );
+
+  const runWorkflow = useCallback((callTool: CallToolFn) => beginRun(callTool), [beginRun]);
+
+  // Collect the successful results still on the canvas and re-run only what's
+  // left. A failed node's `lastResult` is a synthetic error envelope, so only
+  // 'completed' nodes are seeded — the failed node and its (skipped)
+  // descendants stay unseeded and execute again with any edited args.
+  const retryWorkflow = useCallback(
+    (callTool: CallToolFn) => {
+      const seed: Record<string, unknown> = {};
+      for (const n of nodesRef.current) {
+        if (n.data.status === "completed" && n.data.lastResult != null) {
+          seed[n.id] = n.data.lastResult;
+        }
+      }
+      return beginRun(callTool, seed);
+    },
+    [beginRun],
+  );
+
+  const canRetry = !workflowRunning && nodes.some((n) => n.data.status === "failed");
 
   const cancelWorkflow = useCallback(() => {
     abortRef.current?.abort();
@@ -276,27 +425,8 @@ export function useWorkflowStore(): WorkflowState {
   }, []);
 
   const resumeNode = useCallback(
-    (nodeId: string) => {
-      const entry = pendingPausesRef.current.get(nodeId);
-      if (!entry) return;
-      const node = nodesRef.current.find((n) => n.id === nodeId);
-      const currentText = node?.data.argsText ?? "";
-      // If the user edited the paused node's args, re-resolve them
-      // (continue-with-args); otherwise continue with the original args.
-      if (currentText !== entry.argsSnapshot) {
-        try {
-          const parsed = JSON.parse(currentText || "{}");
-          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-            applyPauseAction(nodeId, { type: "continue-with-args", args: parsed as Record<string, unknown> });
-            return;
-          }
-        } catch {
-          // Fall through to a plain continue if the edit isn't valid JSON.
-        }
-      }
-      applyPauseAction(nodeId, { type: "continue" });
-    },
-    [applyPauseAction],
+    (nodeId: string) => continuePausedNode(nodeId),
+    [continuePausedNode],
   );
 
   const skipNode = useCallback(
@@ -319,7 +449,11 @@ export function useWorkflowStore(): WorkflowState {
     edges,
     workflowRunning,
     cycleNodeIds,
+    lastRunError,
+    lastRunStatus,
+    lastRunResult,
     addNode,
+    importWorkflow,
     onNodesChange,
     onEdgesChange,
     onConnect,
@@ -331,6 +465,8 @@ export function useWorkflowStore(): WorkflowState {
     setCycleNodeIds,
     resetStatuses,
     runWorkflow,
+    retryWorkflow,
+    canRetry,
     cancelWorkflow,
     resumeNode,
     skipNode,

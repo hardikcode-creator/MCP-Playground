@@ -10,10 +10,10 @@
       "dependsOn": ["step_a2"]
     },
     {
-      "id": "step_a",
+      "id": "step_a2",
       "tool": "everything__echo",
       "args": { "message": "A2: prepare resource" },
-      "dependsOn": ["step_a"]
+      "breakpoint": true
     },
     {
       "id": "step_b",
