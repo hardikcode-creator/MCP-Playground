@@ -5,6 +5,7 @@ import { BrandLogo, Chevron, Home } from "../lib/icons";
 import { ServerCatalogPane } from "./catalog/ServerCatalogPane";
 import { ToolInspectorPane } from "./inspector/ToolInspectorPane";
 import { WorkflowCanvasPane } from "./WorkflowCanvasPane";
+import { useWorkflowStore } from "../state/workflowStore";
 
 function StatusPill({ dot, children }: { dot: string; children: ReactNode }) {
   return (
@@ -40,7 +41,8 @@ function Rail({ label, side, onExpand }: { label: string; side: "left" | "right"
 }
 
 export function Workspace() {
-  const { config, connectedCount, catalog, failed, skipped, goHome } = useAppState();
+  const { config, connectedCount, catalog, failed, skipped, goHome, selectWorkflowNode } = useAppState();
+  const workflow = useWorkflowStore();
   const total = config?.servers.length ?? 0;
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
@@ -86,12 +88,16 @@ export function Workspace() {
         )}
 
         <div className="min-w-0 flex-1">
-          <WorkflowCanvasPane />
+          <WorkflowCanvasPane
+            workflow={workflow}
+            onSelectWorkflowNode={selectWorkflowNode}
+            onOpenInspector={() => setRightOpen(true)}
+          />
         </div>
 
         {rightOpen ? (
           <div className="w-96 shrink-0 transition-all duration-200">
-            <ToolInspectorPane onCollapse={() => setRightOpen(false)} />
+            <ToolInspectorPane workflow={workflow} onCollapse={() => setRightOpen(false)} />
           </div>
         ) : (
           <Rail label="Inspector" side="right" onExpand={() => setRightOpen(true)} />

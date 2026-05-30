@@ -78,6 +78,14 @@ export type ArgsValidation =
   | { ok: true; value: Record<string, unknown> }
   | { ok: false; errors: ArgIssue[] };
 
+// A `{ "$ref": { nodeId, path } }` value is a workflow wire-up, not a literal.
+// It resolves to the referenced node's output at run time, so we can't (and
+// shouldn't) type-check it against the field's declared schema type here.
+export function isValueRef(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return "$ref" in (value as Record<string, unknown>);
+}
+
 function matchesType(value: unknown, type: string): boolean {
   switch (type) {
     case "string":
@@ -120,6 +128,7 @@ export function validateArgs(schema: JsonSchema, text: string): ArgsValidation {
   for (const [name, def] of Object.entries(props)) {
     const v = obj[name];
     if (!(name in obj) || v === undefined || v === null || v === "") continue;
+    if (isValueRef(v)) continue; // resolved at run time; skip schema-type checks
     if (def.type && !matchesType(v, def.type)) {
       errors.push({ path: name, message: `must be of type ${def.type}` });
     }

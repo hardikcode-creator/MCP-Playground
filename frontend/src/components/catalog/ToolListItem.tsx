@@ -14,7 +14,12 @@ export function ToolListItem({
     <button
       type="button"
       onClick={onSelect}
-      className={`group w-full rounded-md border-l-2 px-2 py-1.5 text-left transition-all duration-150 ease-spring ${
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData("application/mcp-tool", tool.qualifiedName);
+        e.dataTransfer.effectAllowed = "copy";
+      }}
+      className={`group w-full cursor-grab rounded-md border-l-2 px-2 py-1.5 text-left transition-all duration-150 ease-spring active:cursor-grabbing ${
         selected
           ? "border-emerald-400 bg-gradient-to-r from-emerald-500/15 to-transparent"
           : "border-transparent hover:translate-x-0.5 hover:bg-zinc-800/40"
