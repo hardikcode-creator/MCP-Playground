@@ -1,11 +1,14 @@
 import { EventEmitter } from 'node:events';
 import {
+  type BreakpointContext,
   type EngineEvent,
   type NodeRunState,
   type NodeStatus,
+  type PauseAction,
   type Workflow,
   type WorkflowNode,
   type WorkflowRunResult,
+  type WorkflowStatus,
 } from '../types/workflow.js';
 import {
   buildAdjacency,
@@ -18,14 +21,53 @@ import {
 import { RefResolutionError, resolveArgs } from './refs.js';
 
 /**
- * The executor depends on a ToolCaller, not on the concrete ClientManager.
- * This is the dependency-inversion seam: any future surface (WebSocket,
- * MCP-server adapter, in-process tests with mocks) can provide its own
- * implementation without the executor changing.
+ * Calls a single MCP tool. The executor depends on this interface rather than
+ * the concrete ClientManager so different transports (in-process, WebSocket,
+ * tests with mocks) can plug in without touching the executor.
  */
 export interface ToolCaller {
-  call(qualifiedName: string, args: Record<string, unknown>): Promise<unknown>;
+  call(
+    qualifiedName: string,
+    args: Record<string, unknown>,
+    options?: { signal?: AbortSignal },
+  ): Promise<unknown>;
 }
+
+/**
+ * Handles a breakpoint pause. The executor stays UI-agnostic by calling out
+ * to whatever handler was passed in. The CLI's implementation is a
+ * stdin-driven "press Enter to continue"; the future WebSocket
+ * implementation broadcasts the pause context, awaits a user action over the
+ * wire, and resolves the promise with that action.
+ *
+ * The handler MUST eventually resolve (or reject). The executor also races
+ * the handler against the AbortSignal so a stuck handler can't prevent
+ * cancellation, but a well-behaved handler should respect the signal itself
+ * (e.g. the CLI listens for abort and resolves with 'continue').
+ */
+export interface PauseHandler {
+  onBreakpoint(
+    ctx: BreakpointContext,
+    signal?: AbortSignal,
+  ): Promise<PauseAction>;
+}
+
+const DEFAULT_PAUSE_HANDLER: PauseHandler = {
+  async onBreakpoint() {
+    return { type: 'continue' };
+  },
+};
+
+export type RunOptions = {
+  /**
+   * If aborted, the executor stops launching new nodes, cancels in-flight
+   * tool calls (via the same signal forwarded to the ToolCaller), and
+   * resolves any paused breakpoints with a cancelled status. Pending and
+   * ready nodes are marked `cancelled`; the workflow status becomes
+   * `'cancelled'`.
+   */
+  signal?: AbortSignal;
+};
 
 /**
  * Runs a Workflow DAG.
@@ -34,41 +76,116 @@ export interface ToolCaller {
  *   1. validateRefs       — every $ref points to an existing node, no self-refs
  *   2. validateDependsOn  — every explicit dependsOn entry points to an existing node
  *   3. normalizeWorkflow  — union ref sources into dependsOn so it becomes the
- *                           canonical dependency list (idempotent; defensive
- *                           in case the workflow wasn't loaded via the loader)
+ *                           canonical dependency list (idempotent)
  *   4. topoSort           — throws CycleError if the dep graph isn't a DAG
- *                           (catches both data-ref cycles and dependsOn cycles
- *                           because they're now the same graph)
  *   5. seed `ready` with nodes that have no incoming edges
  *   6. loop:
- *        - move every ready node into `inflight`, launch its promise
+ *        - if signal aborted: clear `ready` without launching
+ *        - else: launch every ready node into `inflight`
  *        - await Promise.race(inflight.values())
  *        - on completion: cache result, unlock dependents whose deps are all done
- *        - on failure: transitively mark dependents as `skipped`
+ *        - on failure / skip: transitively mark dependents as skipped
+ *        - on cancellation-caught node (status still 'running' or 'paused'):
+ *          do nothing — dependents stay 'pending'
  *      until both `ready` and `inflight` are empty
  *   7. emit workflow.completed; return WorkflowRunResult
  *
- * The executor emits an EngineEvent for every state transition. CLI subscribes
- * and prints them; future WebSocket subscriber will broadcast them — identical
- * payloads, different transports.
+ * Cancellation is a workflow-level event. When `options.signal` aborts:
+ *   - the workflow's final status is 'cancelled'
+ *   - individual nodes are NOT transitioned to a 'cancelled' status
+ *   - nodes simply freeze in whatever non-terminal state they were in
+ *     ('pending', 'ready', 'running', or 'paused')
+ *   - already-terminal nodes ('completed', 'failed', 'skipped') are unchanged
+ * Consumers should combine workflow.status === 'cancelled' with each node's
+ * status to tell the story ("this one was paused when we killed it").
+ *
+ * Breakpoint semantics:
+ *   A breakpoint pauses ONLY that node's runNode execution. Other nodes
+ *   already in flight (parallel branches) keep running because the main loop
+ *   awaits via Promise.race — the paused node's promise stays pending while
+ *   other promises resolve. The main loop processes those completions,
+ *   unlocks their dependents, and keeps the DAG advancing on every branch
+ *   that isn't downstream of the paused node.
+ *
+ *   Breakpoints come from two sources:
+ *     - Authored (workflow JSON: `breakpoint: true` on a node)
+ *     - Runtime  (executor.setBreakpoint(nodeId) — added by the UI while
+ *                 the workflow is already running)
+ *   They behave identically. A runtime breakpoint added to a node that has
+ *   already passed its breakpoint check is a silent no-op (effectively a
+ *   request for "next time this node runs" — which is never, since each
+ *   node runs once per workflow invocation).
  */
 export class WorkflowExecutor {
   private readonly emitter = new EventEmitter();
+  private readonly toolCaller: ToolCaller;
+  private readonly pauseHandler: PauseHandler;
 
-  constructor(private readonly toolCaller: ToolCaller) {}
+  /**
+   * Runtime breakpoints. Persistent across runs (set once, debug many) and
+   * mutable from outside the executor — UI calls setBreakpoint/clearBreakpoint
+   * at any time, even mid-run. Authored breakpoints (in workflow JSON) are
+   * NOT mirrored here; they live on the node itself.
+   */
+  private readonly runtimeBreakpoints = new Set<string>();
+
+  constructor(
+    toolCaller: ToolCaller,
+    pauseHandler: PauseHandler = DEFAULT_PAUSE_HANDLER,
+  ) {
+    this.toolCaller = toolCaller;
+    this.pauseHandler = pauseHandler;
+  }
 
   on(listener: (event: EngineEvent) => void): () => void {
     this.emitter.on('event', listener);
     return () => this.emitter.off('event', listener);
   }
 
+  // ── Runtime breakpoint API ────────────────────────────────────────────────
+  // Safe to call at any time, including mid-run, from any thread of control
+  // (HTTP/WebSocket handler, CLI side-channel, etc.). Idempotent.
+
+  /**
+   * Arm a breakpoint on the given node. Effective from now on for any future
+   * invocation of that node's runNode. If the node has already started (i.e.
+   * passed the breakpoint check inside runNode), this is a silent no-op for
+   * the current invocation — there's no second chance within a single run.
+   */
+  setBreakpoint(nodeId: string): void {
+    if (this.runtimeBreakpoints.has(nodeId)) return;
+    this.runtimeBreakpoints.add(nodeId);
+    this.emit({ type: 'breakpoint.added', nodeId });
+  }
+
+  /** Remove a previously-armed runtime breakpoint. No-op if not set. */
+  clearBreakpoint(nodeId: string): void {
+    if (!this.runtimeBreakpoints.has(nodeId)) return;
+    this.runtimeBreakpoints.delete(nodeId);
+    this.emit({ type: 'breakpoint.cleared', nodeId });
+  }
+
+  /** Clear every runtime breakpoint at once. */
+  clearAllBreakpoints(): void {
+    for (const id of [...this.runtimeBreakpoints]) this.clearBreakpoint(id);
+  }
+
+  /** Snapshot of currently-armed runtime breakpoints. */
+  listRuntimeBreakpoints(): string[] {
+    return [...this.runtimeBreakpoints];
+  }
+
   private emit(event: EngineEvent): void {
     this.emitter.emit('event', event);
   }
 
-  async run(input: Workflow): Promise<WorkflowRunResult> {
-    // Validate $refs and explicit dependsOn against the ORIGINAL workflow so
-    // error messages mention the exact form the user authored.
+  async run(
+    input: Workflow,
+    options: RunOptions = {},
+  ): Promise<WorkflowRunResult> {
+    const signal = options.signal;
+
+    // Validate against the ORIGINAL workflow so errors mention the user's form.
     const refErrors = validateRefs(input);
     const depErrors = validateDependsOn(input);
     const allErrors = [...refErrors, ...depErrors];
@@ -80,14 +197,7 @@ export class WorkflowExecutor {
       );
     }
 
-    // Normalize: union ref sources into dependsOn so dependsOn becomes the
-    // single source of truth for ordering. Idempotent: a no-op if the workflow
-    // came from `loadWorkflowFromFile` (which already normalized).
     const workflow = normalizeWorkflow(input);
-
-    // Cycle detection runs on the normalized graph, so it catches cycles
-    // formed by data refs AND/OR by explicit dependsOn — they're now the
-    // same edge set.
     topoSort(workflow);
 
     const { incoming, outgoing } = buildAdjacency(workflow);
@@ -124,17 +234,25 @@ export class WorkflowExecutor {
     }
 
     while (ready.size > 0 || inflight.size > 0) {
-      for (const nodeId of [...ready]) {
-        ready.delete(nodeId);
-        const node = nodeById.get(nodeId)!;
-        inflight.set(
-          nodeId,
-          this.runNode(node, states, results),
-        );
+      // Cancellation gate: once aborted, stop launching new work. Ready
+      // nodes simply don't start (they keep status 'ready'). In-flight
+      // nodes still get awaited so their tool calls can wind down (they
+      // observe the same signal — running tools throw abort errors,
+      // paused breakpoints resolve via the signal race in handlePause).
+      // No per-node status transitions for cancellation — cancellation is
+      // a workflow-level event; nodes just freeze where they are.
+      if (!signal?.aborted) {
+        for (const nodeId of [...ready]) {
+          ready.delete(nodeId);
+          const node = nodeById.get(nodeId)!;
+          inflight.set(nodeId, this.runNode(node, states, results, signal));
+        }
+      } else {
+        ready.clear();
       }
 
-      // Wait for ANY inflight to finish. The promise resolves with its own
-      // nodeId so we know which entry to remove from the map.
+      if (inflight.size === 0) break;
+
       const { nodeId: finished } = await Promise.race(inflight.values());
       inflight.delete(finished);
 
@@ -149,21 +267,22 @@ export class WorkflowExecutor {
             this.emit({ type: 'node.ready', nodeId: dependentId });
           }
         }
-      } else if (state.status === 'failed') {
+      } else if (state.status === 'failed' || state.status === 'skipped') {
         this.skipTransitively(
           finished,
           outgoing,
           states,
-          `upstream node "${finished}" failed`,
+          reasonForSkip(state),
         );
       }
+      // else (status still 'running' or 'paused'): cancellation caught this
+      // node mid-execution. Don't touch its status; don't unlock dependents.
+      // They'll stay 'pending' and the workflow-level status will be
+      // 'cancelled', which together tells the full story.
     }
 
     const finishedAt = Date.now();
-    const anyBad = [...states.values()].some(
-      (s) => s.status === 'failed' || s.status === 'skipped',
-    );
-    const status: 'completed' | 'failed' = anyBad ? 'failed' : 'completed';
+    const status = computeWorkflowStatus(states, signal);
     const durationMs = finishedAt - startedAt;
 
     this.emit({
@@ -184,18 +303,21 @@ export class WorkflowExecutor {
     };
   }
 
-  private async runNode(
-    node: WorkflowNode,
-    states: Map<string, NodeRunState>,
+  /**
+   * Resolve a raw args record through the $ref pipeline, validate the result
+   * is a JSON object, and return it. On any failure (ref resolution error or
+   * non-object result), finalize the node as failed and return null so the
+   * caller can bail. Used for both the initial resolve from `node.args` and
+   * the re-resolve after a `continue-with-args` edit at a breakpoint.
+   */
+  private tryResolveArgs(
+    rawArgs: Record<string, unknown>,
+    state: NodeRunState,
     results: Map<string, unknown>,
-  ): Promise<{ nodeId: string }> {
-    const state = states.get(node.id)!;
-    const startedAt = Date.now();
-    state.startedAt = startedAt;
-
-    let resolvedArgs: Record<string, unknown>;
+    startedAt: number,
+  ): Record<string, unknown> | null {
     try {
-      const resolved = resolveArgs(node.args, results);
+      const resolved = resolveArgs(rawArgs, results);
       if (
         typeof resolved !== 'object' ||
         resolved === null ||
@@ -205,23 +327,76 @@ export class WorkflowExecutor {
           `Resolved args is not a JSON object (got ${describe(resolved)})`,
         );
       }
-      resolvedArgs = resolved as Record<string, unknown>;
+      return resolved as Record<string, unknown>;
     } catch (err) {
       const message =
         err instanceof RefResolutionError
           ? err.message
           : (err as Error).message;
-      finalize(state, 'failed', startedAt, undefined, message);
-      this.emit({
-        type: 'node.failed',
-        nodeId: node.id,
-        error: message,
-        durationMs: state.durationMs ?? 0,
-      });
-      return { nodeId: node.id };
+      this.finalizeFailed(state, startedAt, message);
+      return null;
+    }
+  }
+
+  private async runNode(
+    node: WorkflowNode,
+    states: Map<string, NodeRunState>,
+    results: Map<string, unknown>,
+    signal: AbortSignal | undefined,
+  ): Promise<{ nodeId: string }> {
+    const state = states.get(node.id)!;
+    const startedAt = Date.now();
+    state.startedAt = startedAt;
+
+    // 1. Resolve $refs from the authored args.
+    let resolvedArgs = this.tryResolveArgs(node.args, state, results, startedAt);
+    if (resolvedArgs === null) return { nodeId: node.id };
+    state.resolvedArgs = resolvedArgs;
+
+    // 2. BEFORE-call breakpoint (from JSON or set at runtime). Either source
+    // pauses the same way — the only difference is what we report to the UI.
+    // We re-check the runtime set HERE (not earlier) so a breakpoint added
+    // after a node went ready but before it ran still takes effect.
+    const runtimeBp = this.runtimeBreakpoints.has(node.id);
+    const authoredBp = node.breakpoint === true;
+    if (authoredBp || runtimeBp) {
+      const source: BreakpointContext['source'] = authoredBp
+        ? 'authored'
+        : 'runtime';
+      const outcome = await this.handlePause(
+        node,
+        state,
+        source,
+        resolvedArgs,
+        signal,
+      );
+      if (outcome.kind === 'terminal') return { nodeId: node.id };
+      if (outcome.kind === 'args') {
+        // User overrode the args at the breakpoint. Treat their input as the
+        // new "authored" form: store it in typedArgs and run it through the
+        // same resolve pipeline, in case they introduced new $refs pointing
+        // at other completed nodes. If the new args fail to resolve, the
+        // node is finalized as failed inside tryResolveArgs.
+        state.typedArgs = outcome.args;
+        const reresolved = this.tryResolveArgs(
+          outcome.args,
+          state,
+          results,
+          startedAt,
+        );
+        if (reresolved === null) return { nodeId: node.id };
+        resolvedArgs = reresolved;
+        state.resolvedArgs = resolvedArgs;
+      }
     }
 
-    state.resolvedArgs = resolvedArgs;
+    // If cancellation arrived during the pause (or just before), bail out
+    // WITHOUT transitioning the status. The node stays in whatever state
+    // it was in (typically 'ready' if we returned from handlePause via the
+    // signal race). Workflow-level status will be 'cancelled'.
+    if (signal?.aborted) return { nodeId: node.id };
+
+    // 3. Call the tool.
     state.status = 'running';
     this.emit({
       type: 'node.started',
@@ -230,36 +405,118 @@ export class WorkflowExecutor {
       resolvedArgs,
     });
 
+    let result: unknown;
     try {
-      const result = await this.toolCaller.call(node.tool, resolvedArgs);
-      results.set(node.id, result);
-      finalize(state, 'completed', startedAt, result);
-      this.emit({
-        type: 'node.completed',
-        nodeId: node.id,
-        result,
-        durationMs: state.durationMs ?? 0,
-      });
+      result = await this.toolCaller.call(node.tool, resolvedArgs, { signal });
     } catch (err) {
-      const message = (err as Error).message;
-      finalize(state, 'failed', startedAt, undefined, message);
-      this.emit({
-        type: 'node.failed',
-        nodeId: node.id,
-        error: message,
-        durationMs: state.durationMs ?? 0,
-      });
+      if (signal?.aborted) {
+        // Tool call was aborted by cancellation. Leave status as 'running'
+        // to record "this was caught mid-flight"; no node-level finalize.
+        return { nodeId: node.id };
+      }
+      this.finalizeFailed(state, startedAt, (err as Error).message);
+      return { nodeId: node.id };
     }
+
+    // Tool returned, but cancellation arrived first. Record the result for
+    // the audit trail but don't unlock dependents — status stays 'running'.
+    if (signal?.aborted) {
+      state.result = result;
+      return { nodeId: node.id };
+    }
+
+    results.set(node.id, result);
+    this.finalizeCompleted(state, startedAt, result);
     return { nodeId: node.id };
   }
 
+  /**
+   * Runs the pause-handler protocol for a single breakpoint hit. Returns
+   *   - { kind: 'continue' }      — proceed with current args unchanged
+   *   - { kind: 'args', args }    — proceed with modified args
+   *   - { kind: 'terminal' }      — node was skipped, failed, or cancelled;
+   *                                 caller should return immediately
+   *
+   * The pause is raced against `signal.aborted` so a stuck or signal-ignoring
+   * handler can't block cancellation.
+   */
+  private async handlePause(
+    node: WorkflowNode,
+    state: NodeRunState,
+    source: BreakpointContext['source'],
+    args: Record<string, unknown>,
+    signal: AbortSignal | undefined,
+  ): Promise<
+    | { kind: 'continue' }
+    | { kind: 'args'; args: Record<string, unknown> }
+    | { kind: 'terminal' }
+  > {
+    // Already cancelled by the time we got here — don't even emit a pause;
+    // just return so runNode can bail. Status stays whatever it was (ready).
+    if (signal?.aborted) return { kind: 'terminal' };
+
+    const ctx: BreakpointContext = {
+      nodeId: node.id,
+      tool: node.tool,
+      source,
+      args,
+    };
+
+    const previousStatus = state.status;
+    state.status = 'paused';
+    this.emit({
+      type: 'node.paused',
+      nodeId: node.id,
+      source,
+      args,
+    });
+
+    const action = await raceWithSignal(
+      this.pauseHandler.onBreakpoint(ctx, signal),
+      signal,
+    );
+
+    if (action === 'cancelled') {
+      // Pause was forcibly broken by cancellation. Don't emit node.resumed
+      // (the user didn't resume anything) and don't transition status —
+      // the node stays 'paused' to record "this was abandoned at a
+      // breakpoint when the workflow was cancelled".
+      return { kind: 'terminal' };
+    }
+
+    this.emit({
+      type: 'node.resumed',
+      nodeId: node.id,
+      action: action.type,
+    });
+
+    switch (action.type) {
+      case 'continue':
+        state.status = previousStatus;
+        return { kind: 'continue' };
+      case 'continue-with-args':
+        state.status = previousStatus;
+        return { kind: 'args', args: action.args };
+      case 'skip':
+        this.finalizeSkippedAtBreakpoint(state);
+        return { kind: 'terminal' };
+      case 'fail':
+        this.finalizeFailed(
+          state,
+          state.startedAt ?? Date.now(),
+          action.error,
+        );
+        return { kind: 'terminal' };
+    }
+  }
+
   private skipTransitively(
-    failedNodeId: string,
+    parentId: string,
     outgoing: DependencyMap,
     states: Map<string, NodeRunState>,
     reason: string,
   ): void {
-    const queue = [...(outgoing.get(failedNodeId) ?? [])];
+    const queue = [...(outgoing.get(parentId) ?? [])];
     while (queue.length > 0) {
       const next = queue.shift()!;
       const state = states.get(next);
@@ -270,14 +527,60 @@ export class WorkflowExecutor {
       for (const further of outgoing.get(next) ?? []) queue.push(further);
     }
   }
+
+  // ── finalize helpers ──────────────────────────────────────────────────────
+
+  private finalizeCompleted(
+    state: NodeRunState,
+    startedAt: number,
+    result: unknown,
+  ): void {
+    finalizeBase(state, 'completed', startedAt, result, undefined);
+    this.emit({
+      type: 'node.completed',
+      nodeId: state.nodeId,
+      result,
+      durationMs: state.durationMs ?? 0,
+    });
+  }
+
+  private finalizeFailed(
+    state: NodeRunState,
+    startedAt: number,
+    message: string,
+  ): void {
+    finalizeBase(state, 'failed', startedAt, undefined, message);
+    this.emit({
+      type: 'node.failed',
+      nodeId: state.nodeId,
+      error: message,
+      durationMs: state.durationMs ?? 0,
+    });
+  }
+
+  private finalizeSkippedAtBreakpoint(state: NodeRunState): void {
+    const reason = 'skipped at breakpoint';
+    finalizeBase(
+      state,
+      'skipped',
+      state.startedAt ?? Date.now(),
+      undefined,
+      reason,
+    );
+    this.emit({ type: 'node.skipped', nodeId: state.nodeId, reason });
+  }
 }
 
-function finalize(
+// ─────────────────────────────────────────────────────────────────────────────
+// Internal helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function finalizeBase(
   state: NodeRunState,
   status: NodeStatus,
   startedAt: number,
-  result?: unknown,
-  error?: string,
+  result: unknown,
+  error: string | undefined,
 ): void {
   const finishedAt = Date.now();
   state.status = status;
@@ -297,6 +600,67 @@ function allDepsCompleted(
     if (!s || s.status !== 'completed') return false;
   }
   return true;
+}
+
+function reasonForSkip(state: NodeRunState): string {
+  switch (state.status) {
+    case 'skipped':
+      return `upstream node "${state.nodeId}" was skipped`;
+    case 'failed':
+    default:
+      return `upstream node "${state.nodeId}" failed`;
+  }
+}
+
+/**
+ * Roll node statuses up into a single workflow status.
+ *
+ * Precedence:
+ *   1. signal aborted → 'cancelled'  (workflow-level; nodes don't have
+ *      a 'cancelled' status of their own — they just stay in their
+ *      pre-cancel state)
+ *   2. any failed node → 'failed'
+ *   3. otherwise → 'completed'
+ *
+ * Note that `skipped` nodes do NOT downgrade the workflow to 'failed':
+ *   - the user deliberately chose `skip` at a breakpoint (intent, not failure)
+ *   - an upstream dependency failed and we transitively skipped this one
+ *     (the causal failure is already captured as an upstream `failed`,
+ *      which case 2 picks up)
+ * So a workflow whose only skips were user-chosen reports 'completed'.
+ */
+function computeWorkflowStatus(
+  states: Map<string, NodeRunState>,
+  signal: AbortSignal | undefined,
+): WorkflowStatus {
+  if (signal?.aborted) return 'cancelled';
+  for (const s of states.values()) {
+    if (s.status === 'failed') return 'failed';
+  }
+  return 'completed';
+}
+
+async function raceWithSignal(
+  pending: Promise<PauseAction>,
+  signal: AbortSignal | undefined,
+): Promise<PauseAction | 'cancelled'> {
+  if (!signal) return pending;
+  if (signal.aborted) return 'cancelled';
+  return new Promise<PauseAction | 'cancelled'>((resolve) => {
+    let settled = false;
+    const settle = (v: PauseAction | 'cancelled') => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      resolve(v);
+    };
+    const onAbort = () => settle('cancelled');
+    signal.addEventListener('abort', onAbort, { once: true });
+    pending.then(
+      (action) => settle(action),
+      () => settle('cancelled'),
+    );
+  });
 }
 
 function makeRunId(): string {

@@ -73,9 +73,6 @@ export function Workspace() {
             <Home />
             Home
           </button>
-          <button type="button" onClick={goHome} className="btn-ghost px-3 py-1.5 text-xs">
-            Change config
-          </button>
         </div>
       </header>
 

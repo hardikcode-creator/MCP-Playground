@@ -70,7 +70,7 @@ export function BrandLogo({
         cx="21.5"
         cy="11"
         r="2.9"
-        className={`fill-zinc-900 stroke-cyan-300${pulse}`}
+        className={`fill-zinc-900 stroke-emerald-300${pulse}`}
         strokeWidth="1.7"
         style={node("0.7s")}
       />

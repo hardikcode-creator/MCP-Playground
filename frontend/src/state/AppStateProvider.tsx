@@ -55,6 +55,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const reset = useCallback(() => {
     setView("home");
+    setConfigText("");
+    setConfig(null);
     setConnStatus("idle");
     setConnectError(null);
     setCatalog([]);

@@ -1,29 +1,41 @@
-import { useRef, useState } from "react";
-import type { DragEvent, ReactNode } from "react";
+import { useMemo, useRef, useState } from "react";
+import type { DragEvent, MouseEvent, ReactNode } from "react";
 import { useAppState } from "../state/appState";
 import { validateConfig } from "../data/config";
-import { BrandLogo } from "../lib/icons";
 import { CodeEditor } from "./common/CodeEditor";
+import { FootballPitch } from "./home/FootballPitch";
 
-// Decorative, non-interactive backdrop: drifting emerald/cyan/lime glow + dotted grid.
+// Pill-shaped brand badge: small glowing emerald dot + bold wordmark on a
+// dark, faintly emerald-tinted background with a 1px emerald rule. Replaces
+// the old icon+text mark in the nav.
+function BrandPill() {
+  return (
+    <div className="inline-flex items-center gap-2.5 rounded-full border border-emerald-400/45 bg-emerald-950/40 px-4 py-1.5 shadow-[0_0_24px_-12px_rgba(52,211,153,0.6)] backdrop-blur-sm">
+      <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.85)]" />
+      <span className="font-display text-sm font-bold tracking-tight text-emerald-100">
+        MCP Playground
+      </span>
+    </div>
+  );
+}
+
+// The page now uses flat solid colours per the design spec, so the previous
+// radial-gradient backdrop is gone. A very subtle dotted grid is kept as the
+// only atmospheric layer — small enough that it doesn't read as decoration.
 function HomeBackground() {
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:26px_26px] opacity-50" />
-      <div className="animate-drift absolute -top-44 left-1/2 h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-emerald-500/20 blur-3xl" />
-      <div className="animate-drift absolute -left-32 top-1/3 h-80 w-80 rounded-full bg-cyan-500/15 blur-3xl" />
-      <div className="animate-drift absolute bottom-[-12rem] right-[-8rem] h-96 w-96 rounded-full bg-lime-500/10 blur-3xl" />
-      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent" />
-      <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-zinc-950 to-transparent" />
-    </div>
+    <div
+      className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.025)_1px,transparent_1px)] [background-size:28px_28px] opacity-50"
+      aria-hidden="true"
+    />
   );
 }
 
 function UploadGlyph() {
   return (
     <svg
-      width={36}
-      height={36}
+      width={32}
+      height={32}
       viewBox="0 0 48 48"
       fill="none"
       stroke="currentColor"
@@ -42,7 +54,7 @@ function UploadGlyph() {
 function Feature({ icon, title, desc }: { icon: ReactNode; title: string; desc: string }) {
   return (
     <div className="group flex flex-col items-start gap-2 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 text-left transition-all duration-200 ease-spring hover:-translate-y-0.5 hover:border-emerald-500/40 hover:bg-zinc-900/70">
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500/20 to-cyan-500/20 text-emerald-300 ring-1 ring-inset ring-emerald-400/25 transition-transform duration-300 ease-spring group-hover:-rotate-6 group-hover:scale-110">
+      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500/25 to-emerald-400/10 text-emerald-300 ring-1 ring-inset ring-emerald-400/25 transition-transform duration-300 ease-spring group-hover:-rotate-6 group-hover:scale-110">
         {icon}
       </div>
       <div className="font-display text-sm font-semibold text-zinc-100">{title}</div>
@@ -143,7 +155,7 @@ function PasteModal({
 }
 
 export default function HomePage() {
-  const { configText, setConfigText, connect, connStatus, connectError, loadExample, goWorkspace, reset } =
+  const { configText, setConfigText, connect, connStatus, connectError, goWorkspace, reset } =
     useAppState();
   const [pasteOpen, setPasteOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -152,6 +164,17 @@ export default function HomePage() {
   const hasConfig = configText.trim().length > 0;
   const result = validateConfig(configText);
   const connecting = connStatus === "connecting";
+
+  // Pitch swaps from marketing mode (demo names + balls + badges) to a clean
+  // "lineup" of the user's real servers as soon as we have a valid config.
+  // Anything past the six slots becomes a "+N more" pill at midfield so
+  // nothing is silently hidden.
+  const pitchProps = useMemo(() => {
+    if (!result.ok) return { animated: true };
+    const names = result.config.servers.map((s) => s.name);
+    const overflowCount = Math.max(0, names.length - 6);
+    return { animated: false, names: names.slice(0, 6), overflowCount };
+  }, [result]);
 
   function readFile(file: File) {
     const reader = new FileReader();
@@ -166,16 +189,24 @@ export default function HomePage() {
     if (file) readFile(file);
   }
 
+  // The dropzone is a click target itself (opens the file picker), so the
+  // inline "paste JSON" affordance has to swallow the click before it bubbles
+  // up to the parent. Same for keyboard activation.
+  function openPaste(e: MouseEvent<HTMLButtonElement>) {
+    e.stopPropagation();
+    setPasteOpen(true);
+  }
+
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden bg-zinc-950 text-zinc-100">
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-[#0d1f14] text-zinc-100">
       <HomeBackground />
 
-      <nav className="relative z-10 flex items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-2">
-          <BrandLogo size={24} />
-          <span className="font-display text-sm font-semibold tracking-tight">MCP Playground</span>
-        </div>
-        {connStatus === "connected" ? (
+      {/* No nav chrome — the brand pill sits directly on the page background.
+          Right-side workspace controls only appear once a connection exists,
+          otherwise this row is just the brand. */}
+      <div className="relative z-10 flex items-center justify-between px-6 pt-3 pb-1">
+        <BrandPill />
+        {connStatus === "connected" && (
           <div className="flex items-center gap-2">
             <button type="button" onClick={goWorkspace} className="btn-primary px-3 py-1.5 text-xs">
               Back to workspace →
@@ -188,45 +219,31 @@ export default function HomePage() {
               Start over
             </button>
           </div>
-        ) : (
-          <span className="rounded-full border border-zinc-800 bg-zinc-900/60 px-2.5 py-1 font-mono text-[11px] text-zinc-500">
-            Local preview · mock data
-          </span>
         )}
-      </nav>
+      </div>
 
-      <main className="relative z-10 mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-10 px-6 py-10">
-        <header className="flex animate-rise flex-col items-center gap-6 text-center">
-          <div className="relative">
-            <div className="animate-pulse-glow absolute -inset-3 rounded-3xl bg-gradient-to-br from-emerald-500/30 via-cyan-500/20 to-lime-500/20 blur-2xl" />
-            <div className="animate-float relative rounded-2xl bg-gradient-to-br from-emerald-400/60 via-cyan-400/40 to-lime-300/40 p-[1.5px] shadow-xl shadow-emerald-950/40">
-              <div className="rounded-2xl bg-zinc-900/90 p-3 backdrop-blur">
-                <BrandLogo size={56} animated />
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-col gap-3">
-            <h1 className="text-grad font-display text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl">
-              Every MCP tool,
-              <br />
-              one playground.
-            </h1>
-            <p className="mx-auto max-w-xl text-[15px] leading-relaxed text-zinc-400">
-              Point MCP Playground at a single config file and it connects every server you list. From there you can
-              browse each tool, inspect its inputs, and run it live - without writing any code.
-            </p>
-          </div>
-        </header>
+      <main className="relative z-10 mx-auto flex w-full max-w-4xl flex-1 flex-col gap-4 px-6 pt-2 pb-4">
+        {/* Editorial tagline — widely-tracked lowercase, constant bright
+            white. Rises in once on mount; no looping shine. */}
+        <p className="animate-rise text-center font-sans text-[11px] font-medium uppercase tracking-[0.32em] text-white sm:text-xs">
+          inspect · connect · orchestrate · run live
+        </p>
 
-        <div
-          style={{ animationDelay: "80ms" }}
-          className="animate-rise rounded-2xl bg-gradient-to-br from-emerald-500/30 via-zinc-700/30 to-cyan-500/30 p-px shadow-2xl shadow-black/40"
+        {/* Pitch + upload share a single panel. The 12-px radius and white
+            hairline keep the chrome neutral so the green stays concentrated
+            inside the pitch SVG itself. The upload area sits underneath the
+            pitch separated only by a matching divider. */}
+        <section
+          style={{ animationDelay: "60ms" }}
+          className="animate-rise overflow-hidden rounded-xl border border-white/[0.07] bg-[#103d24]"
         >
-          <div className="flex flex-col gap-4 rounded-2xl bg-zinc-900/70 p-5 backdrop-blur-md sm:p-6">
+          <FootballPitch {...pitchProps} />
+
+          <div className="border-t border-white/[0.07] bg-[#0f2a1b] p-4 sm:p-5">
             <div
               role="button"
               tabIndex={0}
-              aria-label="Upload mcp-config.json: click to browse, or drop a file here"
+              aria-label="Upload mcp-config.json: click to browse, drop a file, or paste JSON"
               onClick={() => fileRef.current?.click()}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
@@ -240,20 +257,27 @@ export default function HomePage() {
               }}
               onDragLeave={() => setDragOver(false)}
               onDrop={onDrop}
-              className={`group flex cursor-pointer flex-col items-center gap-3 rounded-xl border-2 border-dashed p-8 text-center transition-all duration-300 ease-spring focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 ${
+              className={`group flex cursor-pointer flex-col items-center gap-2.5 rounded-xl border-2 border-dashed p-5 text-center transition-all duration-300 ease-spring focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60 ${
                 dragOver
-                  ? "scale-[1.01] border-emerald-400 bg-emerald-500/10 shadow-lg shadow-emerald-900/40"
-                  : "border-zinc-700 bg-zinc-950/40 hover:border-emerald-500/50 hover:bg-zinc-900/40"
+                  ? "scale-[1.005] border-emerald-400 bg-emerald-500/10 shadow-lg shadow-emerald-900/40"
+                  : "border-zinc-700 bg-zinc-950/50 hover:border-emerald-500/50 hover:bg-zinc-900/40"
               }`}
             >
-              <div className={dragOver ? "scale-110 transition-transform" : "transition-transform duration-300 ease-spring group-hover:-translate-y-1"}>
+              <div className={dragOver ? "scale-110 transition-transform" : "transition-transform duration-300 ease-spring group-hover:-translate-y-0.5"}>
                 <UploadGlyph />
               </div>
               <p className="text-sm text-zinc-300">
-                Drag and drop your mcp-config.json here, or{" "}
-                <span className="font-medium text-emerald-300">click to browse</span>.
+                Drag and drop your <span className="font-mono text-emerald-300">mcp-config.json</span>,{" "}
+                <span className="font-medium text-emerald-300">click to browse</span>, or{" "}
+                <button
+                  type="button"
+                  onClick={openPaste}
+                  className="font-medium text-emerald-300 underline decoration-emerald-500/60 decoration-dotted underline-offset-2 transition-colors hover:text-emerald-200 hover:decoration-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60"
+                >
+                  paste JSON
+                </button>
+                .
               </p>
-              <p className="font-mono text-xs text-zinc-500">Expects a JSON file with a top-level "servers" array.</p>
               <input
                 ref={fileRef}
                 type="file"
@@ -267,46 +291,37 @@ export default function HomePage() {
               />
             </div>
 
-            <div className="flex flex-wrap items-center justify-center gap-2">
-              <button type="button" onClick={() => setPasteOpen(true)} className="btn-ghost">
-                Paste JSON
-              </button>
-              <button type="button" onClick={loadExample} className="btn-ghost">
-                Load example
-              </button>
-              {hasConfig && (
-                <button
-                  type="button"
-                  onClick={() => setConfigText("")}
-                  className="rounded-xl px-3 py-2 text-sm text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
-                >
-                  Clear
-                </button>
-              )}
-            </div>
-
             {hasConfig && (
-              <div className="flex flex-col gap-3 border-t border-zinc-800 pt-4">
+              <div className="mt-4 flex flex-col gap-3">
                 {result.ok ? (
-                  <div className="rounded-xl border border-emerald-900/60 bg-emerald-950/30 p-4">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-emerald-300">
-                      <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-900/60 bg-emerald-950/30 px-3.5 py-2.5 text-sm">
+                    <span className="flex items-center gap-2 font-medium text-emerald-300">
+                      <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]" />
                       {result.config.servers.length} server{result.config.servers.length === 1 ? "" : "s"} ready to
                       connect
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {result.config.servers.map((s) => (
-                        <span key={s.name} className="rounded bg-zinc-800 px-2 py-0.5 font-mono text-xs text-zinc-300">
-                          {s.name}
-                        </span>
-                      ))}
-                    </div>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setConfigText("")}
+                      className="rounded-md px-2 py-1 text-xs text-zinc-400 transition-colors hover:bg-zinc-800/70 hover:text-zinc-200"
+                    >
+                      Clear
+                    </button>
                   </div>
                 ) : (
-                  <div className="rounded-xl border border-red-900/60 bg-red-950/30 p-4">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-red-300">
-                      <span className="inline-block h-2 w-2 rounded-full bg-red-400" />
-                      {result.errors.length} issue{result.errors.length === 1 ? "" : "s"} to fix
+                  <div className="rounded-xl border border-red-900/60 bg-red-950/30 p-3.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-sm font-semibold text-red-300">
+                        <span className="inline-block h-2 w-2 rounded-full bg-red-400" />
+                        {result.errors.length} issue{result.errors.length === 1 ? "" : "s"} to fix
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setConfigText("")}
+                        className="rounded-md px-2 py-1 text-xs text-zinc-400 transition-colors hover:bg-zinc-800/70 hover:text-zinc-200"
+                      >
+                        Clear
+                      </button>
                     </div>
                     <ul className="mt-2 flex flex-col gap-1">
                       {result.errors.map((err, i) => (
@@ -334,7 +349,7 @@ export default function HomePage() {
               </div>
             )}
           </div>
-        </div>
+        </section>
 
         <div style={{ animationDelay: "160ms" }} className="grid animate-rise grid-cols-1 gap-3 sm:grid-cols-3">
           {FEATURES.map((f) => (

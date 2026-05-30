@@ -1,0 +1,36 @@
+{
+  "id": "workflow-with-breakpoint",
+  "version": 1,
+  "name": "Two independent branches; breakpoint on branchA proves branchB keeps running while A is paused",
+  "nodes": [
+    {
+      "id": "branchA_echo",
+      "tool": "everything__echo",
+      "args": { "message": "This is Node A" },
+      "breakpoint": true
+    },
+    {
+      "id": "branchA_followup",
+      "tool": "everything__echo",
+      "args": {
+        "message": {
+          "$ref": { "nodeId": "branchA_echo", "path": "$.content[0].text" }
+        }
+      }
+    },
+    {
+      "id": "branchB_echo",
+      "tool": "everything__echo",
+      "args": { "message": "This is Node B" }
+    },
+    {
+      "id": "branchB_followup",
+      "tool": "everything__echo",
+      "args": {
+        "message": {
+          "$ref": { "nodeId": "branchB_echo", "path": "$.content[0].text" }
+        }
+      }
+    }
+  ]
+}
