@@ -46,7 +46,9 @@ const children = [];
 function cleanup() {
   for (const c of children) {
     try {
-      c.kill("SIGKILL");
+      // Children are spawned detached (group leaders), so kill the whole group
+      // to take down grandchildren (e.g. vite spawned by npm) too.
+      if (c.pid) process.kill(-c.pid, "SIGKILL");
     } catch {
       /* ignore */
     }
@@ -122,6 +124,7 @@ async function main() {
   const backend = spawn(tsxBin, ["src/server/index.ts"], {
     cwd: backendDir,
     env: { ...process.env, MCP_WS_PORT: WS_PORT },
+    detached: true,
   });
   children.push(backend);
   backend.stderr.on("data", (d) => process.stdout.write(`[backend] ${d}`));
@@ -131,6 +134,7 @@ async function main() {
   const vite = spawn("npm", ["run", "dev", "--", "--port", UI_PORT, "--strictPort"], {
     cwd: frontendDir,
     env: { ...process.env, VITE_MCP_WS_URL: WS_URL },
+    detached: true,
   });
   children.push(vite);
   vite.stdout.on("data", (d) => process.stdout.write(`[vite] ${d}`));
