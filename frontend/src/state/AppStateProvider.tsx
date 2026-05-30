@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import type { PlaygroundConfig, RunRecord, ToolDescriptor } from "../types";
+import type { PlaygroundConfig, RunRecord, ToolDescriptor, ToolResult } from "../types";
 import { createMcpClient } from "../data/mcpClient";
 import { EXAMPLE_CONFIG, validateConfig } from "../data/config";
 import { seedArgs } from "../lib/schema";
@@ -88,6 +88,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [catalog],
   );
 
+  const callTool = useCallback(
+    async (qualifiedName: string, args: Record<string, unknown>): Promise<ToolResult> => {
+      return clientRef.current.callTool(qualifiedName, args);
+    },
+    [],
+  );
+
   const runTool = useCallback(async () => {
     const tool = catalog.find((t) => t.qualifiedName === selectedTool);
     if (!tool) return;
@@ -173,6 +180,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setArgsText,
       setArgMode,
       runTool,
+      callTool,
     }),
     [
       view,
@@ -198,6 +206,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       goWorkspace,
       selectTool,
       runTool,
+      callTool,
     ],
   );
 

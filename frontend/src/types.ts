@@ -63,6 +63,9 @@ export type ConnectResult = {
 // Frontend-only record of a single tool invocation (Pane 3).
 export type RunStatus = "success" | "error";
 
+// Workflow canvas node execution status.
+export type NodeStatus = "idle" | "running" | "success" | "error" | "skipped" | "cycle";
+
 export type RunRecord = {
   qualifiedName: string;
   args: Record<string, unknown>;

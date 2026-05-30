@@ -3,7 +3,7 @@
 // only-export-components rule.
 
 import { createContext, useContext } from "react";
-import type { ConnectResult, PlaygroundConfig, RunRecord, ToolDescriptor } from "../types";
+import type { ConnectResult, PlaygroundConfig, RunRecord, ToolDescriptor, ToolResult } from "../types";
 
 export type View = "home" | "workspace";
 export type ArgMode = "params" | "raw";
@@ -45,6 +45,7 @@ export type AppStateValue = {
   setArgsText: (text: string) => void;
   setArgMode: (mode: ArgMode) => void;
   runTool: () => Promise<void>;
+  callTool: (qualifiedName: string, args: Record<string, unknown>) => Promise<ToolResult>;
 };
 
 export const AppStateContext = createContext<AppStateValue | null>(null);
