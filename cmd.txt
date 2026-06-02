@@ -1,0 +1,73 @@
+MCP Playground - run commands
+==============================
+
+Prerequisites
+-------------
+- Node.js >= 20            (backend engines requirement)
+- uv                       (https://docs.astral.sh/uv/ - runs the Python Prism MCP)
+- Python >= 3.10           (3.13 recommended; uv can install it for you)
+
+Each step below runs in its own terminal. Steps 1-3 are the core stack.
+
+
+0) One-time: bake this repo's absolute path into the example configs
+   (the example JSON files ship with a "__REPO_ROOT__" placeholder).
+   Run from the repo root:
+
+   ./setup.sh
+
+   Windows (PowerShell), equivalent one-liner:
+   (Get-ChildItem -Recurse examples -Filter *.json) | ForEach-Object {
+     (Get-Content $_.FullName) -replace '__REPO_ROOT__', ((Get-Location).Path -replace '\\','/') | Set-Content $_.FullName
+   }
+
+
+1) Prism REST API  ->  http://localhost:8000  (Swagger at /docs)
+   Ships with a sample collected DB, so it works with zero config.
+
+   uv run --directory prism-mcp/rest-api python rest_server.py
+
+
+2) Backend  ->  WebSocket server on ws://localhost:8787
+   This is the MCP proxy + workflow engine the UI talks to.
+
+   cd backend
+   npm install
+   npm run dev:serve        # watch mode (use "npm run serve" for one-shot)
+
+
+3) Frontend  ->  http://localhost:5173  (Vite prints the exact URL)
+   VITE_MCP_WS_URL points the UI at the backend so it drives REAL MCP servers.
+   (Without it, the UI runs in mock mode and won't call real servers.)
+
+   cd frontend
+   npm install
+   VITE_MCP_WS_URL=ws://localhost:8787 npm run dev
+
+   Then open the UI, load an example's mcp-config + workflow (see examples/README.md),
+   and run. The collector MCP and the npx servers
+   (chart / filesystem / everything / memory / github) are launched automatically
+   by the playground from the loaded config.
+
+
+Handy extras
+------------
+# Run the collector MCP by hand (normally the playground does this for you):
+uv run --directory prism-mcp/mcp-server python server.py
+
+# Headless: run a workflow straight from the backend CLI (no UI):
+cd backend
+npm run dev -- ../examples/_shared_configs/mcp-config-multi.json run-workflow ../examples/hello_world/workflow-hello.json
+
+# Prism REST API tests:
+uv run --directory prism-mcp/rest-api --extra dev pytest
+
+
+Environment variables
+---------------------
+PRISM_API_DB_DIR              Directory of collected *.db files (default: prism-mcp/rest-api)
+PRISM_API_DEFAULT_DB          Default DB filename       (default: "PC 2024.3 legacy.db")
+PRISM_API_HOST / PRISM_API_PORT   REST API bind         (default: 0.0.0.0 / 8000)
+MCP_WS_PORT  (or PORT)        Backend WebSocket port    (default: 8787)
+VITE_MCP_WS_URL               Frontend -> backend WS URL (e.g. ws://localhost:8787)
+GITHUB_PERSONAL_ACCESS_TOKEN  Token for the github MCP examples (repo scope)
