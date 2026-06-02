@@ -4,6 +4,12 @@ import { ApiClient, ClustersApi } from '@nutanix-api/clustermgmt-js-client';
 import { ApiClient as VmmApiClient, VmApi } from '@nutanix-api/vmm-js-client';
 import { ApiClient as CvmsApiClient, CvmsApi } from '@nutanix-api/clustermgmt-js-client';
 
+type ListQueryOptions = {
+  page?: number;
+  limit?: number;
+  select?: string;
+};
+
 function buildClusterApiClient(): ClustersApi {
   const client = new ApiClient();
   client.host = process.env.NUTANIX_HOST ?? '10.47.104.90';
@@ -49,12 +55,33 @@ function unwrap(data: any): unknown {
   return data;
 }
 
-export async function listClusters(page = 0, limit = 50): Promise<unknown> {
+function buildListOpts(opts: ListQueryOptions = {}): Record<string, string | number> {
+  const built: Record<string, string | number> = {
+    '$page': opts.page ?? 0,
+    '$limit': opts.limit ?? 50,
+  };
+
+  if (typeof opts.select === 'string' && opts.select.trim().length > 0) {
+    const trimmed = opts.select.trim();
+    const unquoted =
+      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'"))
+        ? trimmed.slice(1, -1).trim()
+        : trimmed;
+    if (unquoted.length > 0) {
+      built.$select = unquoted;
+    }
+  }
+
+  return built;
+}
+
+export async function listClusters(opts: ListQueryOptions = {}): Promise<unknown> {
   const api = buildClusterApiClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const opts: any = { '$page': page, '$limit': limit };
+  const queryOpts: any = buildListOpts(opts);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = (await api.listClusters(opts)) as { data: any };
+  const { data } = (await api.listClusters(queryOpts)) as { data: any };
   return unwrap(data);
 }
 
@@ -65,12 +92,12 @@ export async function getClusterById(extId: string): Promise<unknown> {
   return unwrap(data);
 }
 
-export async function listVms(page = 0, limit = 50): Promise<unknown> {
+export async function listVms(opts: ListQueryOptions = {}): Promise<unknown> {
   const api = buildVmApiClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const opts: any = { '$page': page, '$limit': limit };
+  const queryOpts: any = buildListOpts(opts);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = (await api.listVms(opts)) as { data: any };
+  const { data } = (await api.listVms(queryOpts)) as { data: any };
   return unwrap(data);
 }
 
@@ -83,23 +110,25 @@ export async function getVmById(extId: string): Promise<unknown> {
 
 export async function listDisksByVmId(
   vmExtId: string,
-  page = 0,
-  limit = 50,
+  opts: ListQueryOptions = {},
 ): Promise<unknown> {
   const api = buildVmApiClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const opts: any = { '$page': page, '$limit': limit };
+  const queryOpts: any = buildListOpts(opts);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = (await api.listDisksByVmId(vmExtId, opts)) as { data: any };
+  const { data } = (await api.listDisksByVmId(vmExtId, queryOpts)) as { data: any };
   return unwrap(data);
 }
 
-export async function listCvmsByClusterId(clusterExtId: string): Promise<unknown> {
+export async function listCvmsByClusterId(
+  clusterExtId: string,
+  opts: ListQueryOptions = {},
+): Promise<unknown> {
   const api = buildCvmsApiClient();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const opts: any = { '$page': 0, '$limit': 50 };
+  const queryOpts: any = buildListOpts(opts);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = (await api.listCvmsbyClusterId(clusterExtId, opts)) as { data: any };
+  const { data } = (await api.listCvmsbyClusterId(clusterExtId, queryOpts)) as { data: any };
   return unwrap(data);
 } 
 
