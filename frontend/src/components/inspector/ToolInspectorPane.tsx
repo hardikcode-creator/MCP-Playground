@@ -4,7 +4,9 @@ import { Chevron, Play, Spinner } from "../../lib/icons";
 import { validateArgs } from "../../lib/schema";
 import { resolveValueRefsDetailed } from "../../lib/workflowRefs";
 import { ArgsInput } from "./ArgsInput";
+import { AiMapPanel } from "./AiMapPanel";
 import { ResponseViewer } from "./ResponseViewer";
+import type { AiPreviousNode } from "../../data/aiClient";
 import type { WorkflowState } from "../../state/workflowStore";
 import type { RunStatus, ToolResult } from "../../types";
 
@@ -122,6 +124,40 @@ export function ToolInspectorPane({
     return workflow.nodes.map((n) => ({ id: n.id, label: n.id, tool: n.data.qualifiedName }));
   }, [workflow]);
 
+  // Upstream nodes (with a captured response) the AI can map FROM. Prefer the
+  // direct graph predecessors of the selected node; if none of those have run
+  // yet, fall back to any other node that has a response — so AI mapping works
+  // whether the user wired edges first or just ran the upstream tools.
+  const aiPreviousNodes = useMemo<AiPreviousNode[]>(() => {
+    if (!workflow || !selectedWorkflowNode) return [];
+    const currentId = selectedWorkflowNode.id;
+
+    const toEntry = (nodeId: string): AiPreviousNode | null => {
+      const n = workflow.getNodeById(nodeId);
+      if (!n || n.id === currentId) return null;
+      const response = nodeStructureSample(nodeId);
+      if (!response) return null;
+      return {
+        nodeId: n.id,
+        tool: n.data.qualifiedName,
+        description: n.data.description,
+        response,
+      };
+    };
+
+    const predecessorIds = workflow.edges
+      .filter((e) => e.target === currentId)
+      .map((e) => e.source);
+    const fromEdges = predecessorIds
+      .map(toEntry)
+      .filter((e): e is AiPreviousNode => e !== null);
+    if (fromEdges.length > 0) return fromEdges;
+
+    return workflow.nodes
+      .map((n) => toEntry(n.id))
+      .filter((e): e is AiPreviousNode => e !== null);
+  }, [workflow, selectedWorkflowNode, nodeStructureSample]);
+
   const paused = selectedWorkflowNode?.data.status === "paused";
   const runningState = selectedWorkflowNode ? selectedWorkflowNode.data.status === "running" : running;
   const latestRun = selectedWorkflowNode
@@ -226,6 +262,19 @@ export function ToolInspectorPane({
                 </span>
               )}
             </div>
+
+            {selectedWorkflowNode && (
+              <AiMapPanel
+                currentNode={{
+                  tool: selectedDescriptor.qualifiedName,
+                  description: selectedDescriptor.description,
+                  inputSchema: selectedDescriptor.inputSchema,
+                }}
+                previousNodes={aiPreviousNodes}
+                argsText={effectiveArgsText}
+                onChangeArgs={setEffectiveArgsText}
+              />
+            )}
 
             {selectedWorkflowNode && liveResolvedPreview && (
               <div className="flex flex-col gap-1.5">

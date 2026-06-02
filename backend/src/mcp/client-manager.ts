@@ -38,7 +38,7 @@ const CLIENT_INFO = {
   version: '0.0.1',
 };
 
-const CONNECT_TIMEOUT_MS = 30_000;
+const CONNECT_TIMEOUT_MS = 300_000;
 
 /**
  * ClientManager handles connection parsing and listing of tools from MCP servers.
