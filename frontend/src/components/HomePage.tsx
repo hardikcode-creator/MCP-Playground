@@ -86,8 +86,8 @@ function Feature({ icon, title, desc }: { icon: ReactNode; title: string; desc: 
 const FEATURE_ICON = "shrink-0";
 const FEATURES = [
   {
-    title: "Connect",
-    desc: "List your servers once and they all launch together in a single click.",
+    title: "Workflow Builder",
+    desc: "Build cross-MCP workflows that connect tools, data, and actions across multiple servers.",
     icon: (
       <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={FEATURE_ICON}>
         <path d="M9 17H7A5 5 0 0 1 7 7h2M15 7h2a5 5 0 0 1 0 10h-2M8 12h8" />
@@ -95,8 +95,8 @@ const FEATURES = [
     ),
   },
   {
-    title: "Inspect",
-    desc: "Every tool's input schema becomes a typed form automatically, so you always know what a call expects.",
+    title: "Live Debugging",
+    desc: "Add or remove breakpoints on the fly, inspect every response, get intelligent argument suggestions, and steer execution in real time.",
     icon: (
       <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={FEATURE_ICON}>
         <circle cx="11" cy="11" r="7" />
@@ -105,8 +105,8 @@ const FEATURES = [
     ),
   },
   {
-    title: "Run",
-    desc: "Send real calls to any tool and read the raw response instantly - no glue code required.",
+    title: "Persistence & Recovery",
+    desc: "Save workflows, share configurations, and resume execution from the last successful step after failures.",
     icon: (
       <svg width={18} height={18} viewBox="0 0 24 24" fill="currentColor" className={FEATURE_ICON}>
         <path d="M8 5.14c0-.86.96-1.37 1.67-.88l9.2 6.86a1.06 1.06 0 0 1 0 1.76l-9.2 6.86c-.71.49-1.67-.02-1.67-.88z" />
@@ -267,7 +267,7 @@ export default function HomePage() {
         {/* Editorial tagline — widely-tracked lowercase, constant bright
             white. Rises in once on mount; no looping shine. */}
         <p className="animate-rise text-center font-sans text-[11px] font-medium uppercase tracking-[0.32em] text-white sm:text-xs">
-          inspect · connect · orchestrate · run live
+        Black Box to Glass Box: Orchestrate · Inspect · Intervene
         </p>
 
         {/* Pitch + upload share a single panel. The 12-px radius and white
