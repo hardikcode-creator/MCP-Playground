@@ -4,10 +4,10 @@
       "command": "npx",
       "args": ["tsx", "src/demo_mcp/server.ts"],
       "env": {
-        "NUTANIX_HOST": "10.47.104.80",
+        "NUTANIX_HOST": "REPLACE_WITH_YOUR_PRISM_HOST",
         "NUTANIX_PORT": "9440",
-        "NUTANIX_USERNAME": "admin",
-        "NUTANIX_PASSWORD": "Nutanix123$"
+        "NUTANIX_USERNAME": "REPLACE_WITH_YOUR_USERNAME",
+        "NUTANIX_PASSWORD": "REPLACE_WITH_YOUR_PASSWORD"
       }
     }
   }

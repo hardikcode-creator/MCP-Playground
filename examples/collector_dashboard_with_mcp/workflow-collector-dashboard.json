@@ -1,0 +1,512 @@
+{
+  "id": "collector-dashboard",
+  "version": 1,
+  "name": "Collector multi-MCP dashboard: discover DBs/metadata -> list clusters & VMs -> drill into a cluster, its hosts and a VM -> pull unit-scaled perf + capacity chart specs -> render beautiful donut/line images via AntV -> persist the image URLs to disk (filesystem) -> echo milestones and total storage (everything) -> build a cluster->host->vm knowledge graph (memory). Exercises all 19 collector tools across 7 layers with cross-node $refs and 4 breakpoints.",
+  "nodes": [
+    {
+      "id": "n_health",
+      "tool": "collector__get_health",
+      "args": {},
+      "dependsOn": [],
+      "breakpoint": false
+    },
+    {
+      "id": "n_databases",
+      "tool": "collector__get_listdatabases",
+      "args": {},
+      "dependsOn": [],
+      "breakpoint": false
+    },
+    {
+      "id": "n_metadata",
+      "tool": "collector__get_metadata",
+      "args": {},
+      "dependsOn": [],
+      "breakpoint": true
+    },
+    {
+      "id": "n_clusters",
+      "tool": "collector__get_listclusters",
+      "args": {},
+      "dependsOn": [],
+      "breakpoint": false
+    },
+    {
+      "id": "n_vms",
+      "tool": "collector__get_listvms",
+      "args": {},
+      "dependsOn": [],
+      "breakpoint": false
+    },
+
+    {
+      "id": "n_cluster",
+      "tool": "collector__get_cluster",
+      "args": {
+        "cluster_moid": { "$ref": { "nodeId": "n_clusters", "path": "$.structuredContent.data.api_response[0].moid" } }
+      },
+      "dependsOn": ["n_clusters"],
+      "breakpoint": true
+    },
+    {
+      "id": "n_cluster_perf",
+      "tool": "collector__get_clusterperf",
+      "args": {
+        "cluster_moid": { "$ref": { "nodeId": "n_clusters", "path": "$.structuredContent.data.api_response[0].moid" } }
+      },
+      "dependsOn": ["n_clusters"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_hosts",
+      "tool": "collector__get_listhosts",
+      "args": {
+        "cluster_moid": { "$ref": { "nodeId": "n_clusters", "path": "$.structuredContent.data.api_response[0].moid" } }
+      },
+      "dependsOn": ["n_clusters"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_host",
+      "tool": "collector__get_host",
+      "args": {
+        "host_id": { "$ref": { "nodeId": "n_hosts", "path": "$.structuredContent.data.api_response[0].host_id" } }
+      },
+      "dependsOn": ["n_hosts"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_host_perf",
+      "tool": "collector__get_hostperf",
+      "args": {
+        "host_id": { "$ref": { "nodeId": "n_hosts", "path": "$.structuredContent.data.api_response[0].host_id" } }
+      },
+      "dependsOn": ["n_hosts"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_vm",
+      "tool": "collector__get_vm",
+      "args": {
+        "vm_id": { "$ref": { "nodeId": "n_vms", "path": "$.structuredContent.data.api_response[0].vm_id" } }
+      },
+      "dependsOn": ["n_vms"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_vm_perf",
+      "tool": "collector__get_vmperf",
+      "args": {
+        "vm_id": { "$ref": { "nodeId": "n_vms", "path": "$.structuredContent.data.api_response[0].vm_id" } }
+      },
+      "dependsOn": ["n_vms"],
+      "breakpoint": false
+    },
+
+    {
+      "id": "n_cluster_line",
+      "tool": "collector__get_clusterlinechart",
+      "args": {
+        "moid": { "$ref": { "nodeId": "n_clusters", "path": "$.structuredContent.data.api_response[0].moid" } },
+        "dataset": "historical"
+      },
+      "dependsOn": ["n_cluster_perf"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_host_line",
+      "tool": "collector__get_hostlinechart",
+      "args": {
+        "host_id": { "$ref": { "nodeId": "n_hosts", "path": "$.structuredContent.data.api_response[0].host_id" } },
+        "dataset": "historical"
+      },
+      "dependsOn": ["n_host_perf"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_vm_line",
+      "tool": "collector__get_vmlinechart",
+      "args": {
+        "vm_id": { "$ref": { "nodeId": "n_vms", "path": "$.structuredContent.data.api_response[0].vm_id" } },
+        "dataset": "recent"
+      },
+      "dependsOn": ["n_vm_perf"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_cluster_pie",
+      "tool": "collector__get_clustercapacitypie",
+      "args": {
+        "moid": { "$ref": { "nodeId": "n_clusters", "path": "$.structuredContent.data.api_response[0].moid" } },
+        "resource": "storage"
+      },
+      "dependsOn": ["n_cluster"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_cluster_mem_pie",
+      "tool": "collector__get_clustercapacitypie",
+      "args": {
+        "moid": { "$ref": { "nodeId": "n_clusters", "path": "$.structuredContent.data.api_response[0].moid" } },
+        "resource": "memory"
+      },
+      "dependsOn": ["n_cluster"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_host_pie",
+      "tool": "collector__get_hostcapacitypie",
+      "args": {
+        "host_id": { "$ref": { "nodeId": "n_hosts", "path": "$.structuredContent.data.api_response[0].host_id" } }
+      },
+      "dependsOn": ["n_host"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_clusters_pie",
+      "tool": "collector__get_clusterscapacitypie",
+      "args": {
+        "resource": "storage"
+      },
+      "dependsOn": ["n_clusters"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_containers_pie",
+      "tool": "collector__get_clusterstoragecontainerspie",
+      "args": {
+        "moid": { "$ref": { "nodeId": "n_clusters", "path": "$.structuredContent.data.api_response[0].moid" } },
+        "metric": "consumed"
+      },
+      "dependsOn": ["n_cluster"],
+      "breakpoint": false
+    },
+
+    {
+      "id": "n_viz_cluster_line",
+      "tool": "chart__generate_line_chart",
+      "args": {
+        "data": { "$ref": { "nodeId": "n_cluster_line", "path": "$.structuredContent.data.api_response.data" } },
+        "title": { "$ref": { "nodeId": "n_cluster_line", "path": "$.structuredContent.data.api_response.title" } },
+        "axisXTitle": "time",
+        "axisYTitle": { "$ref": { "nodeId": "n_cluster_line", "path": "$.structuredContent.data.api_response.axisYTitle" } },
+        "theme": "academy",
+        "width": 1040,
+        "height": 600,
+        "style": { "lineWidth": 3, "startAtZero": true }
+      },
+      "dependsOn": ["n_cluster_line"],
+      "breakpoint": true
+    },
+    {
+      "id": "n_viz_host_line",
+      "tool": "chart__generate_line_chart",
+      "args": {
+        "data": { "$ref": { "nodeId": "n_host_line", "path": "$.structuredContent.data.api_response.data" } },
+        "title": { "$ref": { "nodeId": "n_host_line", "path": "$.structuredContent.data.api_response.title" } },
+        "axisXTitle": "time",
+        "axisYTitle": { "$ref": { "nodeId": "n_host_line", "path": "$.structuredContent.data.api_response.axisYTitle" } },
+        "theme": "academy",
+        "width": 1040,
+        "height": 600,
+        "style": { "lineWidth": 3, "startAtZero": true }
+      },
+      "dependsOn": ["n_host_line"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_viz_vm_line",
+      "tool": "chart__generate_line_chart",
+      "args": {
+        "data": { "$ref": { "nodeId": "n_vm_line", "path": "$.structuredContent.data.api_response.data" } },
+        "title": { "$ref": { "nodeId": "n_vm_line", "path": "$.structuredContent.data.api_response.title" } },
+        "axisXTitle": "time",
+        "axisYTitle": { "$ref": { "nodeId": "n_vm_line", "path": "$.structuredContent.data.api_response.axisYTitle" } },
+        "theme": "academy",
+        "width": 1040,
+        "height": 600,
+        "style": { "lineWidth": 3, "startAtZero": true }
+      },
+      "dependsOn": ["n_vm_line"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_viz_cluster_pie",
+      "tool": "chart__generate_pie_chart",
+      "args": {
+        "data": { "$ref": { "nodeId": "n_cluster_pie", "path": "$.structuredContent.data.api_response.data" } },
+        "title": { "$ref": { "nodeId": "n_cluster_pie", "path": "$.structuredContent.data.api_response.title" } },
+        "innerRadius": 0.6,
+        "theme": "academy",
+        "width": 820,
+        "height": 620
+      },
+      "dependsOn": ["n_cluster_pie"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_viz_cluster_mem_pie",
+      "tool": "chart__generate_pie_chart",
+      "args": {
+        "data": { "$ref": { "nodeId": "n_cluster_mem_pie", "path": "$.structuredContent.data.api_response.data" } },
+        "title": { "$ref": { "nodeId": "n_cluster_mem_pie", "path": "$.structuredContent.data.api_response.title" } },
+        "innerRadius": 0.6,
+        "theme": "academy",
+        "width": 820,
+        "height": 620
+      },
+      "dependsOn": ["n_cluster_mem_pie"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_viz_host_pie",
+      "tool": "chart__generate_pie_chart",
+      "args": {
+        "data": { "$ref": { "nodeId": "n_host_pie", "path": "$.structuredContent.data.api_response.data" } },
+        "title": { "$ref": { "nodeId": "n_host_pie", "path": "$.structuredContent.data.api_response.title" } },
+        "innerRadius": 0.6,
+        "theme": "academy",
+        "width": 820,
+        "height": 620
+      },
+      "dependsOn": ["n_host_pie"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_viz_clusters_pie",
+      "tool": "chart__generate_pie_chart",
+      "args": {
+        "data": { "$ref": { "nodeId": "n_clusters_pie", "path": "$.structuredContent.data.api_response.data" } },
+        "title": { "$ref": { "nodeId": "n_clusters_pie", "path": "$.structuredContent.data.api_response.title" } },
+        "innerRadius": 0.6,
+        "theme": "academy",
+        "width": 820,
+        "height": 620
+      },
+      "dependsOn": ["n_clusters_pie"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_viz_containers_pie",
+      "tool": "chart__generate_pie_chart",
+      "args": {
+        "data": { "$ref": { "nodeId": "n_containers_pie", "path": "$.structuredContent.data.api_response.data" } },
+        "title": { "$ref": { "nodeId": "n_containers_pie", "path": "$.structuredContent.data.api_response.title" } },
+        "innerRadius": 0.6,
+        "theme": "academy",
+        "width": 820,
+        "height": 620
+      },
+      "dependsOn": ["n_containers_pie"],
+      "breakpoint": false
+    },
+
+    {
+      "id": "n_fs_mkdir",
+      "tool": "filesystem__create_directory",
+      "args": {
+        "path": "__REPO_ROOT__/examples/collector_dashboard_with_mcp/output"
+      },
+      "dependsOn": [],
+      "breakpoint": false
+    },
+    {
+      "id": "n_fs_cluster_line",
+      "tool": "filesystem__write_file",
+      "args": {
+        "path": "__REPO_ROOT__/examples/collector_dashboard_with_mcp/output/cluster-line.url.txt",
+        "content": { "$ref": { "nodeId": "n_viz_cluster_line", "path": "$.content[0].text" } }
+      },
+      "dependsOn": ["n_fs_mkdir", "n_viz_cluster_line"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_fs_host_line",
+      "tool": "filesystem__write_file",
+      "args": {
+        "path": "__REPO_ROOT__/examples/collector_dashboard_with_mcp/output/host-line.url.txt",
+        "content": { "$ref": { "nodeId": "n_viz_host_line", "path": "$.content[0].text" } }
+      },
+      "dependsOn": ["n_fs_mkdir", "n_viz_host_line"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_fs_vm_line",
+      "tool": "filesystem__write_file",
+      "args": {
+        "path": "__REPO_ROOT__/examples/collector_dashboard_with_mcp/output/vm-line.url.txt",
+        "content": { "$ref": { "nodeId": "n_viz_vm_line", "path": "$.content[0].text" } }
+      },
+      "dependsOn": ["n_fs_mkdir", "n_viz_vm_line"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_fs_cluster_pie",
+      "tool": "filesystem__write_file",
+      "args": {
+        "path": "__REPO_ROOT__/examples/collector_dashboard_with_mcp/output/cluster-storage-pie.url.txt",
+        "content": { "$ref": { "nodeId": "n_viz_cluster_pie", "path": "$.content[0].text" } }
+      },
+      "dependsOn": ["n_fs_mkdir", "n_viz_cluster_pie"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_fs_cluster_mem_pie",
+      "tool": "filesystem__write_file",
+      "args": {
+        "path": "__REPO_ROOT__/examples/collector_dashboard_with_mcp/output/cluster-memory-pie.url.txt",
+        "content": { "$ref": { "nodeId": "n_viz_cluster_mem_pie", "path": "$.content[0].text" } }
+      },
+      "dependsOn": ["n_fs_mkdir", "n_viz_cluster_mem_pie"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_fs_host_pie",
+      "tool": "filesystem__write_file",
+      "args": {
+        "path": "__REPO_ROOT__/examples/collector_dashboard_with_mcp/output/host-storage-pie.url.txt",
+        "content": { "$ref": { "nodeId": "n_viz_host_pie", "path": "$.content[0].text" } }
+      },
+      "dependsOn": ["n_fs_mkdir", "n_viz_host_pie"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_fs_clusters_pie",
+      "tool": "filesystem__write_file",
+      "args": {
+        "path": "__REPO_ROOT__/examples/collector_dashboard_with_mcp/output/clusters-storage-pie.url.txt",
+        "content": { "$ref": { "nodeId": "n_viz_clusters_pie", "path": "$.content[0].text" } }
+      },
+      "dependsOn": ["n_fs_mkdir", "n_viz_clusters_pie"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_fs_containers_pie",
+      "tool": "filesystem__write_file",
+      "args": {
+        "path": "__REPO_ROOT__/examples/collector_dashboard_with_mcp/output/containers-consumed-pie.url.txt",
+        "content": { "$ref": { "nodeId": "n_viz_containers_pie", "path": "$.content[0].text" } }
+      },
+      "dependsOn": ["n_fs_mkdir", "n_viz_containers_pie"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_fs_list",
+      "tool": "filesystem__list_directory",
+      "args": {
+        "path": "__REPO_ROOT__/examples/collector_dashboard_with_mcp/output"
+      },
+      "dependsOn": [
+        "n_fs_cluster_line",
+        "n_fs_host_line",
+        "n_fs_vm_line",
+        "n_fs_cluster_pie",
+        "n_fs_cluster_mem_pie",
+        "n_fs_host_pie",
+        "n_fs_clusters_pie",
+        "n_fs_containers_pie"
+      ],
+      "breakpoint": false
+    },
+
+    {
+      "id": "n_echo_cluster",
+      "tool": "everything__echo",
+      "args": {
+        "message": { "$ref": { "nodeId": "n_clusters", "path": "$.structuredContent.data.api_response[0].name" } }
+      },
+      "dependsOn": ["n_clusters"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_sum_storage",
+      "tool": "everything__get-sum",
+      "args": {
+        "a": { "$ref": { "nodeId": "n_cluster_pie", "path": "$.structuredContent.data.api_response.data[0].value" } },
+        "b": { "$ref": { "nodeId": "n_cluster_pie", "path": "$.structuredContent.data.api_response.data[1].value" } }
+      },
+      "dependsOn": ["n_cluster_pie"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_echo_primary_chart",
+      "tool": "everything__echo",
+      "args": {
+        "message": { "$ref": { "nodeId": "n_viz_cluster_line", "path": "$.content[0].text" } }
+      },
+      "dependsOn": ["n_viz_cluster_line"],
+      "breakpoint": false
+    },
+
+    {
+      "id": "n_mem_entities",
+      "tool": "memory__create_entities",
+      "args": {
+        "entities": [
+          {
+            "name": { "$ref": { "nodeId": "n_clusters", "path": "$.structuredContent.data.api_response[0].name" } },
+            "entityType": "NutanixCluster",
+            "observations": [
+              { "$ref": { "nodeId": "n_viz_cluster_line", "path": "$.content[0].text" } },
+              { "$ref": { "nodeId": "n_viz_cluster_pie", "path": "$.content[0].text" } },
+              { "$ref": { "nodeId": "n_viz_cluster_mem_pie", "path": "$.content[0].text" } },
+              { "$ref": { "nodeId": "n_viz_clusters_pie", "path": "$.content[0].text" } },
+              { "$ref": { "nodeId": "n_viz_containers_pie", "path": "$.content[0].text" } }
+            ]
+          },
+          {
+            "name": { "$ref": { "nodeId": "n_hosts", "path": "$.structuredContent.data.api_response[0].host_name" } },
+            "entityType": "NutanixHost",
+            "observations": [
+              { "$ref": { "nodeId": "n_viz_host_pie", "path": "$.content[0].text" } }
+            ]
+          },
+          {
+            "name": { "$ref": { "nodeId": "n_vms", "path": "$.structuredContent.data.api_response[0].name" } },
+            "entityType": "NutanixVM",
+            "observations": [
+              { "$ref": { "nodeId": "n_viz_vm_line", "path": "$.content[0].text" } }
+            ]
+          }
+        ]
+      },
+      "dependsOn": [
+        "n_viz_cluster_line",
+        "n_viz_cluster_pie",
+        "n_viz_cluster_mem_pie",
+        "n_viz_clusters_pie",
+        "n_viz_containers_pie",
+        "n_viz_host_pie",
+        "n_viz_vm_line"
+      ],
+      "breakpoint": false
+    },
+    {
+      "id": "n_mem_relations",
+      "tool": "memory__create_relations",
+      "args": {
+        "relations": [
+          {
+            "from": { "$ref": { "nodeId": "n_clusters", "path": "$.structuredContent.data.api_response[0].name" } },
+            "to": { "$ref": { "nodeId": "n_hosts", "path": "$.structuredContent.data.api_response[0].host_name" } },
+            "relationType": "has_host"
+          },
+          {
+            "from": { "$ref": { "nodeId": "n_hosts", "path": "$.structuredContent.data.api_response[0].host_name" } },
+            "to": { "$ref": { "nodeId": "n_vms", "path": "$.structuredContent.data.api_response[0].name" } },
+            "relationType": "runs_vm"
+          }
+        ]
+      },
+      "dependsOn": ["n_mem_entities"],
+      "breakpoint": false
+    },
+    {
+      "id": "n_mem_read",
+      "tool": "memory__read_graph",
+      "args": {},
+      "dependsOn": ["n_mem_relations"],
+      "breakpoint": true
+    }
+  ]
+}
