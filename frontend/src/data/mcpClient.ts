@@ -7,7 +7,7 @@ import type { ConnectResult, PlaygroundConfig, ToolResult } from "../types";
 import { MockMcpClient } from "./mockMcpClient";
 import { WorkflowExecutor } from "../lib/workflow/executor";
 import type { PauseHandler, ToolCaller } from "../lib/workflow/executor";
-import type { BreakpointContext, EngineEvent, Workflow, WorkflowRunResult } from "../lib/workflow/types";
+import type { BreakpointContext, EngineEvent, Workflow, WorkflowNode, WorkflowRunResult } from "../lib/workflow/types";
 import { getSharedConnection } from "./wsConnection";
 import type { WsConnection, WsStatus } from "./wsConnection";
 
@@ -98,6 +98,15 @@ export type WorkflowRunOptions = {
   // Resume: results of nodes that already completed, keyed by node id. Seeded
   // nodes are reported completed and skipped; only the rest re-run.
   seedResults?: Record<string, unknown>;
+  // Input gate (local runner only): arg names still needing a value for a node,
+  // given its resolved args and CURRENT raw args → pause it with source
+  // 'missing-input'. The WebSocket runner ignores this; the backend computes the
+  // same gate from its catalog.
+  needsInput?: (
+    node: WorkflowNode,
+    resolvedArgs: Record<string, unknown>,
+    rawArgs: Record<string, unknown>,
+  ) => string[];
 };
 
 export interface WorkflowRunner {
@@ -127,7 +136,7 @@ export class LocalWorkflowRunner implements WorkflowRunner {
 
   run(
     workflow: Workflow,
-    { onEvent, pauseHandler, signal, seedResults }: WorkflowRunOptions,
+    { onEvent, pauseHandler, signal, seedResults, needsInput }: WorkflowRunOptions,
   ): Promise<WorkflowRunResult> {
     const toolCaller: ToolCaller = {
       call: (qualifiedName, args, options) => this.callTool(qualifiedName, args, options),
@@ -135,7 +144,7 @@ export class LocalWorkflowRunner implements WorkflowRunner {
     const executor = new WorkflowExecutor(toolCaller, pauseHandler);
     this.executor = executor;
     const off = executor.on(onEvent);
-    return executor.run(workflow, { signal, seedResults }).finally(() => {
+    return executor.run(workflow, { signal, seedResults, needsInput }).finally(() => {
       off();
       this.executor = null;
     });
@@ -188,6 +197,7 @@ export class WebSocketWorkflowRunner implements WorkflowRunner {
           tool: "",
           source: event.source,
           args: event.args,
+          ...(event.missingArgs ? { missingArgs: event.missingArgs } : {}),
         };
         void Promise.resolve(pauseHandler.onBreakpoint(ctx, signal)).then((action) => {
           this.conn.send({ type: "pauseAction", runId, nodeId: event.nodeId, action });

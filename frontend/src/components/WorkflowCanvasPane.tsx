@@ -350,6 +350,22 @@ function Canvas({
 
   const pausedCount = useMemo(() => nodes.filter((n) => n.data.status === "paused").length, [nodes]);
 
+  // Auto-focus a node that pauses for input: when a NEW 'missing-input' pause
+  // appears, select it and open the inspector so the user is prompted to fill
+  // the args (manually or via Auto-map) without hunting for the node.
+  const focusedMissingRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const current = nodes.filter(
+      (n) => n.data.status === "paused" && n.data.pauseSource === "missing-input",
+    );
+    const newlyPaused = current.find((n) => !focusedMissingRef.current.has(n.id));
+    focusedMissingRef.current = new Set(current.map((n) => n.id));
+    if (newlyPaused) {
+      onSelectWorkflowNode(newlyPaused.id, newlyPaused.data.qualifiedName);
+      onOpenInspector();
+    }
+  }, [nodes, onSelectWorkflowNode, onOpenInspector]);
+
   // Drive the status chip: a live run shows running/paused; a finished run keeps
   // its terminal status until the next run, clear, or import.
   const runPhase: RunPhase | null = workflowRunning
@@ -368,7 +384,10 @@ function Canvas({
   }, [cycleIds, nodes]);
 
   const hasCycle = cycleIds.length > 0;
-  const hasInvalidArgs = useMemo(() => {
+  // Only structural problems block the run: invalid JSON or a non-object args
+  // body. Missing required values / half-wired $refs no longer block — the run
+  // starts and pauses on those nodes to prompt the user (manual or AI auto-map).
+  const hasBlockingError = useMemo(() => {
     for (const n of nodes) {
       let parsed: unknown;
       try {
@@ -377,17 +396,30 @@ function Canvas({
         return true;
       }
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return true;
-      const obj = parsed as Record<string, unknown>;
-      if (findMissingRequired(n.data.inputSchema, obj).length > 0) return true;
-      if (hasIncompleteRef(obj)) return true;
     }
     return false;
+  }, [nodes]);
+  // How many nodes will pause for input during the run (informational hint only).
+  const needsInputCount = useMemo(() => {
+    let count = 0;
+    for (const n of nodes) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(n.data.argsText || "{}");
+      } catch {
+        continue; // a JSON error is a blocking error, counted separately.
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+      const obj = parsed as Record<string, unknown>;
+      if (findMissingRequired(n.data.inputSchema, obj).length > 0 || hasIncompleteRef(obj)) count += 1;
+    }
+    return count;
   }, [nodes]);
   const showBanner = hasCycle && dismissedCycleKey !== edgeKey;
 
   // A node-level retry is allowed when a prior run left a failure and the graph
-  // is currently runnable (not running, no cycle, no invalid args).
-  const retryEnabled = canRetry && !hasCycle && !hasInvalidArgs;
+  // is currently runnable (not running, no cycle, no blocking JSON error).
+  const retryEnabled = canRetry && !hasCycle && !hasBlockingError;
   const canvasActions = useMemo(
     () => ({ toggleBreakpoint, retry: handleRetryWorkflow, retryEnabled }),
     [toggleBreakpoint, handleRetryWorkflow, retryEnabled],
@@ -509,16 +541,34 @@ function Canvas({
               Cancel
             </button>
           ) : (
-            <button
-              type="button"
-              disabled={nodes.length === 0 || hasCycle || hasInvalidArgs}
-              onClick={handleRunWorkflow}
-              title={hasCycle ? "Resolve cycle before running" : hasInvalidArgs ? "Fix invalid node args before running" : undefined}
-              className="flex items-center gap-1.5 rounded-md border border-emerald-700/60 bg-emerald-900/40 px-2.5 py-1 text-xs font-medium text-emerald-300 transition-all hover:border-emerald-500 hover:bg-emerald-900/70 hover:text-emerald-200 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-transparent disabled:text-zinc-600"
-            >
-              <PlayIcon />
-              Run Workflow
-            </button>
+            <>
+              {needsInputCount > 0 && !hasCycle && !hasBlockingError && (
+                <span
+                  title="These nodes are missing required values or have an incomplete reference. The run will pause on each so you can fill them in or Auto-map with AI."
+                  className="flex items-center gap-1 rounded-md border border-amber-700/50 bg-amber-950/30 px-2 py-1 text-[11px] font-medium text-amber-300"
+                >
+                  {needsInputCount} node{needsInputCount === 1 ? "" : "s"} need input
+                </span>
+              )}
+              <button
+                type="button"
+                disabled={nodes.length === 0 || hasCycle || hasBlockingError}
+                onClick={handleRunWorkflow}
+                title={
+                  hasCycle
+                    ? "Resolve cycle before running"
+                    : hasBlockingError
+                      ? "Fix invalid node args (JSON) before running"
+                      : needsInputCount > 0
+                        ? `${needsInputCount} node(s) need input — you'll be prompted during the run`
+                        : undefined
+                }
+                className="flex items-center gap-1.5 rounded-md border border-emerald-700/60 bg-emerald-900/40 px-2.5 py-1 text-xs font-medium text-emerald-300 transition-all hover:border-emerald-500 hover:bg-emerald-900/70 hover:text-emerald-200 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-transparent disabled:text-zinc-600"
+              >
+                <PlayIcon />
+                Run Workflow
+              </button>
+            </>
           )}
         </div>
       </div>

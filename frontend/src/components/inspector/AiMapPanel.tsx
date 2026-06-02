@@ -74,6 +74,10 @@ export function AiMapPanel({
       const next = valueForMapping(m);
       if (next === undefined) continue;
       if (onlyEmpty && !isFieldEmpty(obj[m.argument])) continue;
+      // Auto-fill never writes a reference whose path didn't resolve against the
+      // upstream response — that would only fail at run time. The suggestion is
+      // still listed so the user can apply it explicitly if they really want to.
+      if (onlyEmpty && m.decision === "reference" && m.pathResolves === false) continue;
       obj[m.argument] = next;
       applied++;
     }
@@ -124,8 +128,8 @@ export function AiMapPanel({
           disabled={disabled}
           title={
             previousNodes.length === 0
-              ? "Run upstream nodes (or this tool standalone) so the AI has responses to map from"
-              : "Suggest argument mappings from upstream responses"
+              ? "Connect a previous node and run it so the AI has its response to map from"
+              : "Suggest argument mappings from the previous node's response"
           }
           className="inline-flex items-center gap-1.5 rounded-md border border-violet-600/60 bg-violet-900/40 px-2.5 py-1 text-xs font-medium text-violet-100 transition-colors hover:border-violet-400 hover:bg-violet-900/70 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-transparent disabled:text-zinc-600"
         >
@@ -136,12 +140,13 @@ export function AiMapPanel({
 
       {previousNodes.length === 0 ? (
         <p className="text-[11px] text-zinc-500">
-          No upstream responses yet. Run the workflow (or run the upstream tools) so the AI has data to map from.
+          No previous-node output to map from. Connect a previous node and run the workflow so AI mapping can use its
+          response. You can always fill the arguments in manually.
         </p>
       ) : (
         <p className="text-[11px] text-violet-200/60">
           Suggests how to wire each argument from{" "}
-          {previousNodes.length === 1 ? "the upstream node" : `${previousNodes.length} upstream nodes`}. Empty fields
+          {previousNodes.length === 1 ? "the previous node" : `${previousNodes.length} previous nodes`}. Empty fields
           are filled automatically.
         </p>
       )}
