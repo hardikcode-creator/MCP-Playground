@@ -4,7 +4,8 @@ import { Chevron, Play, Spinner } from "../../lib/icons";
 import { validateArgs } from "../../lib/schema";
 import { resolveValueRefsDetailed } from "../../lib/workflowRefs";
 import { ArgsInput } from "./ArgsInput";
-import { AiMapPanel } from "./AiMapPanel";
+import { AiMapPanel, initialAiMapPanelState } from "./AiMapPanel";
+import type { AiMapPanelState } from "./AiMapPanel";
 import { ResponseViewer } from "./ResponseViewer";
 import type { AiPreviousNode } from "../../data/aiClient";
 import type { WorkflowState } from "../../state/workflowStore";
@@ -29,6 +30,10 @@ export function ToolInspectorPane({
   onCollapse?: () => void;
 }) {
   const [copyState, setCopyState] = useState<"idle" | "ok" | "error">("idle");
+  // AI mapping result is kept per node id so each node remembers its own
+  // suggestions when you switch away and come back, while never showing one
+  // node's mappings on another node.
+  const [aiMapStateByNode, setAiMapStateByNode] = useState<Record<string, AiMapPanelState>>({});
   const {
     inspectorSource,
     selectedWorkflowNodeId,
@@ -269,6 +274,10 @@ export function ToolInspectorPane({
                 previousNodes={aiPreviousNodes}
                 argsText={effectiveArgsText}
                 onChangeArgs={setEffectiveArgsText}
+                state={aiMapStateByNode[selectedWorkflowNode.id] ?? initialAiMapPanelState}
+                onStateChange={(next) =>
+                  setAiMapStateByNode((prev) => ({ ...prev, [selectedWorkflowNode.id]: next }))
+                }
               />
             )}
 

@@ -1,7 +1,23 @@
-import { useState } from "react";
 import { Sparkles, Spinner } from "../../lib/icons";
 import { suggestMappings, AiServiceError } from "../../data/aiClient";
 import type { AiCurrentNode, AiMapping, AiMappingResult, AiPreviousNode } from "../../data/aiClient";
+
+// The panel's transient result state is owned by the parent (keyed per node) so
+// that switching between nodes preserves each node's own suggestions instead of
+// either sharing one node's result across all nodes or wiping it on every switch.
+export type AiMapPanelState = {
+  status: "idle" | "loading" | "error" | "done";
+  error: string | null;
+  result: AiMappingResult | null;
+  appliedCount: number;
+};
+
+export const initialAiMapPanelState: AiMapPanelState = {
+  status: "idle",
+  error: null,
+  result: null,
+  appliedCount: 0,
+};
 
 // "Auto-map with AI": given the current workflow node and the responses of its
 // upstream nodes, ask the AI service which argument should be wired to which
@@ -54,16 +70,17 @@ export function AiMapPanel({
   previousNodes,
   argsText,
   onChangeArgs,
+  state,
+  onStateChange,
 }: {
   currentNode: AiCurrentNode;
   previousNodes: AiPreviousNode[];
   argsText: string;
   onChangeArgs: (text: string) => void;
+  state: AiMapPanelState;
+  onStateChange: (next: AiMapPanelState) => void;
 }) {
-  const [status, setStatus] = useState<"idle" | "loading" | "error" | "done">("idle");
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<AiMappingResult | null>(null);
-  const [appliedCount, setAppliedCount] = useState(0);
+  const { status, error, result, appliedCount } = state;
 
   const disabled = previousNodes.length === 0 || status === "loading";
 
@@ -86,22 +103,16 @@ export function AiMapPanel({
   };
 
   const run = async () => {
-    setStatus("loading");
-    setError(null);
-    setResult(null);
-    setAppliedCount(0);
+    onStateChange({ status: "loading", error: null, result: null, appliedCount: 0 });
     try {
       const res = await suggestMappings({ currentNode, previousNodes });
-      setResult(res);
       // Auto-fill only the still-empty fields, so a user's existing wiring is
       // never clobbered. Everything else stays available to apply manually.
       const applied = applyMappings(res.mappings, true);
-      setAppliedCount(applied);
-      setStatus("done");
+      onStateChange({ status: "done", error: null, result: res, appliedCount: applied });
     } catch (err) {
       const message = err instanceof AiServiceError ? err.message : (err as Error).message;
-      setError(message);
-      setStatus("error");
+      onStateChange({ status: "error", error: message, result: null, appliedCount: 0 });
     }
   };
 
