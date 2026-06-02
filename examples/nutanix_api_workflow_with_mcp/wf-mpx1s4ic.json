@@ -1,0 +1,110 @@
+{
+  "id": "wf-mpx1s4ic",
+  "version": 1,
+  "nodes": [
+    {
+      "id": "nutanix__list_clusters-1",
+      "tool": "nutanix__list_clusters",
+      "args": {
+        "page": 0,
+        "limit": 10
+      },
+      "dependsOn": [],
+      "breakpoint": false
+    },
+    {
+      "id": "nutanix__get_cluster_by_id-2",
+      "tool": "nutanix__get_cluster_by_id",
+      "args": {
+        "extId": {
+          "$ref": {
+            "nodeId": "nutanix__list_clusters-1",
+            "path": "$.structuredContent[0].extId"
+          }
+        }
+      },
+      "dependsOn": [
+        "nutanix__list_clusters-1"
+      ],
+      "breakpoint": false
+    },
+    {
+      "id": "nutanix__list_cvms_by_cluster_id-2",
+      "tool": "nutanix__list_cvms_by_cluster_id",
+      "args": {
+        "clusterExtId": "0006462e-a59a-7208-1a78-3cecef82d948"
+      },
+      "dependsOn": [
+        "nutanix__get_cluster_by_id-2"
+      ],
+      "breakpoint": false
+    },
+    {
+      "id": "nutanix__get_cvm_by_id-2",
+      "tool": "nutanix__get_cvm_by_id",
+      "args": {
+        "clusterExtId": {
+          "$ref": {
+            "nodeId": "nutanix__list_cvms_by_cluster_id-2",
+            "path": "$.structuredContent[0].clusterExtId"
+          }
+        },
+        "cvmExtId": {
+          "$ref": {
+            "nodeId": "nutanix__list_cvms_by_cluster_id-2",
+            "path": "$.structuredContent[0].extId"
+          }
+        }
+      },
+      "dependsOn": [
+        "nutanix__list_cvms_by_cluster_id-2"
+      ],
+      "breakpoint": false
+    },
+    {
+      "id": "nutanix__list_vms-1",
+      "tool": "nutanix__list_vms",
+      "args": {
+        "page": 0,
+        "limit": 10,
+        "select": "\"extId,name,description\""
+      },
+      "dependsOn": [],
+      "breakpoint": false
+    },
+    {
+      "id": "nutanix__get_vm_by_id-2",
+      "tool": "nutanix__get_vm_by_id",
+      "args": {
+        "extId": {
+          "$ref": {
+            "nodeId": "nutanix__list_vms-1",
+            "path": "$.structuredContent[1].extId"
+          }
+        }
+      },
+      "dependsOn": [
+        "nutanix__list_vms-1"
+      ],
+      "breakpoint": false
+    },
+    {
+      "id": "nutanix__list_disks_by_vm_id-2",
+      "tool": "nutanix__list_disks_by_vm_id",
+      "args": {
+        "vmExtId": {
+          "$ref": {
+            "nodeId": "nutanix__get_vm_by_id-2",
+            "path": "$.structuredContent.extId"
+          }
+        },
+        "page": 0,
+        "limit": 10
+      },
+      "dependsOn": [
+        "nutanix__get_vm_by_id-2"
+      ],
+      "breakpoint": false
+    }
+  ]
+}
