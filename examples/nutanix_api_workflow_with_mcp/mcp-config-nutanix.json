@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "nutanix": {
+      "command": "npx",
+      "args": ["tsx", "src/demo_mcp/server.ts"],
+      "env": {
+        "NUTANIX_HOST": "10.47.104.80",
+        "NUTANIX_PORT": "9440",
+        "NUTANIX_USERNAME": "admin",
+        "NUTANIX_PASSWORD": "Nutanix123$"
+      }
+    }
+  }
+}
