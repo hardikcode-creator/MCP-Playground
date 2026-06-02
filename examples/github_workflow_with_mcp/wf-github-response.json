@@ -1,0 +1,960 @@
+{
+  "workflowId": "wf-mpsxdqv4",
+  "runId": "run_mpsxdqwg_uh505d",
+  "status": "completed",
+  "startedAt": 1780180290160,
+  "finishedAt": 1780180356118,
+  "durationMs": 65958,
+  "steps": [
+    {
+      "nodeId": "create_repo",
+      "tool": "github__create_repository",
+      "status": "completed",
+      "typedArgs": {
+        "name": "mcp-playground-demo",
+        "description": "Demo repository created from an MCP Playground workflow",
+        "private": false,
+        "autoInit": false
+      },
+      "startedAt": 1780180290160,
+      "resolvedArgs": {
+        "name": "mcp-playground-demo",
+        "description": "Demo repository created from an MCP Playground workflow",
+        "private": false,
+        "autoInit": false
+      },
+      "finishedAt": 1780180291922,
+      "durationMs": 1762,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"id\": 1254696718,\n  \"node_id\": \"R_kgDOSsknDg\",\n  \"name\": \"mcp-playground-demo\",\n  \"full_name\": \"hardikcode-creator/mcp-playground-demo\",\n  \"private\": false,\n  \"owner\": {\n    \"login\": \"hardikcode-creator\",\n    \"id\": 179830333,\n    \"node_id\": \"U_kgDOCrf-PQ\",\n    \"avatar_url\": \"https://avatars.githubusercontent.com/u/179830333?v=4\",\n    \"url\": \"https://api.github.com/users/hardikcode-creator\",\n    \"html_url\": \"https://github.com/hardikcode-creator\",\n    \"type\": \"User\"\n  },\n  \"html_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo\",\n  \"description\": \"Demo repository created from an MCP Playground workflow\",\n  \"fork\": false,\n  \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo\",\n  \"created_at\": \"2026-05-30T22:31:30Z\",\n  \"updated_at\": \"2026-05-30T22:31:31Z\",\n  \"pushed_at\": \"2026-05-30T22:31:31Z\",\n  \"git_url\": \"git://github.com/hardikcode-creator/mcp-playground-demo.git\",\n  \"ssh_url\": \"git@github.com:hardikcode-creator/mcp-playground-demo.git\",\n  \"clone_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo.git\",\n  \"default_branch\": \"main\"\n}"
+          }
+        ],
+        "structuredContent": {
+          "id": 1254696718,
+          "node_id": "R_kgDOSsknDg",
+          "name": "mcp-playground-demo",
+          "full_name": "hardikcode-creator/mcp-playground-demo",
+          "private": false,
+          "owner": {
+            "login": "hardikcode-creator",
+            "id": 179830333,
+            "node_id": "U_kgDOCrf-PQ",
+            "avatar_url": "https://avatars.githubusercontent.com/u/179830333?v=4",
+            "url": "https://api.github.com/users/hardikcode-creator",
+            "html_url": "https://github.com/hardikcode-creator",
+            "type": "User"
+          },
+          "html_url": "https://github.com/hardikcode-creator/mcp-playground-demo",
+          "description": "Demo repository created from an MCP Playground workflow",
+          "fork": false,
+          "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo",
+          "created_at": "2026-05-30T22:31:30Z",
+          "updated_at": "2026-05-30T22:31:31Z",
+          "pushed_at": "2026-05-30T22:31:31Z",
+          "git_url": "git://github.com/hardikcode-creator/mcp-playground-demo.git",
+          "ssh_url": "git@github.com:hardikcode-creator/mcp-playground-demo.git",
+          "clone_url": "https://github.com/hardikcode-creator/mcp-playground-demo.git",
+          "default_branch": "main"
+        }
+      }
+    },
+    {
+      "nodeId": "list_all_repos",
+      "tool": "github__search_repositories",
+      "status": "completed",
+      "typedArgs": {
+        "query": "user:octo-demo",
+        "perPage": 10
+      },
+      "startedAt": 1780180291922,
+      "resolvedArgs": {
+        "query": "user:octo-demo",
+        "perPage": 10
+      },
+      "finishedAt": 1780180292353,
+      "durationMs": 431,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"total_count\": 0,\n  \"incomplete_results\": false,\n  \"items\": []\n}"
+          }
+        ],
+        "structuredContent": {
+          "total_count": 0,
+          "incomplete_results": false,
+          "items": []
+        }
+      }
+    },
+    {
+      "nodeId": "find_new_repo",
+      "tool": "github__search_repositories",
+      "status": "completed",
+      "typedArgs": {
+        "query": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.name"
+          }
+        },
+        "perPage": 5
+      },
+      "startedAt": 1780180291922,
+      "resolvedArgs": {
+        "query": "mcp-playground-demo",
+        "perPage": 5
+      },
+      "finishedAt": 1780180292613,
+      "durationMs": 691,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"total_count\": 6,\n  \"incomplete_results\": false,\n  \"items\": [\n    {\n      \"id\": 1164196935,\n      \"node_id\": \"R_kgDORWQ8Rw\",\n      \"name\": \"simple-mcp\",\n      \"full_name\": \"chrisabit-it/simple-mcp\",\n      \"private\": false,\n      \"owner\": {\n        \"login\": \"chrisabit-it\",\n        \"id\": 140162443,\n        \"node_id\": \"U_kgDOCFq1iw\",\n        \"avatar_url\": \"https://avatars.githubusercontent.com/u/140162443?v=4\",\n        \"url\": \"https://api.github.com/users/chrisabit-it\",\n        \"html_url\": \"https://github.com/chrisabit-it\",\n        \"type\": \"User\"\n      },\n      \"html_url\": \"https://github.com/chrisabit-it/simple-mcp\",\n      \"description\": \"Simple MCP Demo Playground\",\n      \"fork\": false,\n      \"url\": \"https://api.github.com/repos/chrisabit-it/simple-mcp\",\n      \"created_at\": \"2026-02-22T19:28:13Z\",\n      \"updated_at\": \"2026-04-28T09:47:32Z\",\n      \"pushed_at\": \"2026-04-28T09:47:28Z\",\n      \"git_url\": \"git://github.com/chrisabit-it/simple-mcp.git\",\n      \"ssh_url\": \"git@github.com:chrisabit-it/simple-mcp.git\",\n      \"clone_url\": \"https://github.com/chrisabit-it/simple-mcp.git\",\n      \"default_branch\": \"main\"\n    },\n    {\n      \"id\": 1254679356,\n      \"node_id\": \"R_kgDOSsjjPA\",\n      \"name\": \"mcp-playground-demo\",\n      \"full_name\": \"bPratyush/mcp-playground-demo\",\n      \"private\": false,\n      \"owner\": {\n        \"login\": \"bPratyush\",\n        \"id\": 81455621,\n        \"node_id\": \"MDQ6VXNlcjgxNDU1NjIx\",\n        \"avatar_url\": \"https://avatars.githubusercontent.com/u/81455621?v=4\",\n        \"url\": \"https://api.github.com/users/bPratyush\",\n        \"html_url\": \"https://github.com/bPratyush\",\n        \"type\": \"User\"\n      },\n      \"html_url\": \"https://github.com/bPratyush/mcp-playground-demo\",\n      \"description\": \"Demo repository created from an MCP Playground workflow\",\n      \"fork\": false,\n      \"url\": \"https://api.github.com/repos/bPratyush/mcp-playground-demo\",\n      \"created_at\": \"2026-05-30T21:52:17Z\",\n      \"updated_at\": \"2026-05-30T21:52:50Z\",\n      \"pushed_at\": \"2026-05-30T21:52:46Z\",\n      \"git_url\": \"git://github.com/bPratyush/mcp-playground-demo.git\",\n      \"ssh_url\": \"git@github.com:bPratyush/mcp-playground-demo.git\",\n      \"clone_url\": \"https://github.com/bPratyush/mcp-playground-demo.git\",\n      \"default_branch\": \"main\"\n    },\n    {\n      \"id\": 1190963998,\n      \"node_id\": \"R_kgDORvyrHg\",\n      \"name\": \"agent-layer-playground\",\n      \"full_name\": \"lightlayer-dev/agent-layer-playground\",\n      \"private\": false,\n      \"owner\": {\n        \"login\": \"lightlayer-dev\",\n        \"id\": 218844875,\n        \"node_id\": \"O_kgDODQtOyw\",\n        \"avatar_url\": \"https://avatars.githubusercontent.com/u/218844875?v=4\",\n        \"url\": \"https://api.github.com/users/lightlayer-dev\",\n        \"html_url\": \"https://github.com/lightlayer-dev\",\n        \"type\": \"Organization\"\n      },\n      \"html_url\": \"https://github.com/lightlayer-dev/agent-layer-playground\",\n      \"description\": \"Live playground — 4 agent-ready demo APIs. Try MCP, A2A, llms.txt, agents.txt in action.\",\n      \"fork\": false,\n      \"url\": \"https://api.github.com/repos/lightlayer-dev/agent-layer-playground\",\n      \"created_at\": \"2026-03-24T19:42:09Z\",\n      \"updated_at\": \"2026-03-25T22:16:19Z\",\n      \"pushed_at\": \"2026-03-30T18:17:16Z\",\n      \"git_url\": \"git://github.com/lightlayer-dev/agent-layer-playground.git\",\n      \"ssh_url\": \"git@github.com:lightlayer-dev/agent-layer-playground.git\",\n      \"clone_url\": \"https://github.com/lightlayer-dev/agent-layer-playground.git\",\n      \"default_branch\": \"main\"\n    },\n    {\n      \"id\": 1202997435,\n      \"node_id\": \"R_kgDOR7RIuw\",\n      \"name\": \"prodmcp-masl\",\n      \"full_name\": \"anishchelliahcr/prodmcp-masl\",\n      \"private\": false,\n      \"owner\": {\n        \"login\": \"anishchelliahcr\",\n        \"id\": 42589712,\n        \"node_id\": \"MDQ6VXNlcjQyNTg5NzEy\",\n        \"avatar_url\": \"https://avatars.githubusercontent.com/u/42589712?v=4\",\n        \"url\": \"https://api.github.com/users/anishchelliahcr\",\n        \"html_url\": \"https://github.com/anishchelliahcr\",\n        \"type\": \"User\"\n      },\n      \"html_url\": \"https://github.com/anishchelliahcr/prodmcp-masl\",\n      \"description\": \"ProdMCP demo app — unified REST + MCP server with Azure AD auth, Gemini tool calling, and React playground\",\n      \"fork\": false,\n      \"url\": \"https://api.github.com/repos/anishchelliahcr/prodmcp-masl\",\n      \"created_at\": \"2026-04-06T16:07:56Z\",\n      \"updated_at\": \"2026-04-06T16:08:42Z\",\n      \"pushed_at\": \"2026-04-06T16:08:36Z\",\n      \"git_url\": \"git://github.com/anishchelliahcr/prodmcp-masl.git\",\n      \"ssh_url\": \"git@github.com:anishchelliahcr/prodmcp-masl.git\",\n      \"clone_url\": \"https://github.com/anishchelliahcr/prodmcp-masl.git\",\n      \"default_branch\": \"main\"\n    },\n    {\n      \"id\": 1232079864,\n      \"node_id\": \"R_kgDOSXAL-A\",\n      \"name\": \"openclawp\",\n      \"full_name\": \"lezama/openclawp\",\n      \"private\": false,\n      \"owner\": {\n        \"login\": \"lezama\",\n        \"id\": 104869,\n        \"node_id\": \"MDQ6VXNlcjEwNDg2OQ==\",\n        \"avatar_url\": \"https://avatars.githubusercontent.com/u/104869?v=4\",\n        \"url\": \"https://api.github.com/users/lezama\",\n        \"html_url\": \"https://github.com/lezama\",\n        \"type\": \"User\"\n      },\n      \"html_url\": \"https://github.com/lezama/openclawp\",\n      \"description\": \"WordPress-native AI agents in chat blocks, REST, workflows, channels — built on Automattic/agents-api. Demo on Playground, MCP server admin, BYO provider.\",\n      \"fork\": false,\n      \"url\": \"https://api.github.com/repos/lezama/openclawp\",\n      \"created_at\": \"2026-05-07T15:10:35Z\",\n      \"updated_at\": \"2026-05-22T19:15:48Z\",\n      \"pushed_at\": \"2026-05-22T19:15:45Z\",\n      \"git_url\": \"git://github.com/lezama/openclawp.git\",\n      \"ssh_url\": \"git@github.com:lezama/openclawp.git\",\n      \"clone_url\": \"https://github.com/lezama/openclawp.git\",\n      \"default_branch\": \"main\"\n    }\n  ]\n}"
+          }
+        ],
+        "structuredContent": {
+          "total_count": 6,
+          "incomplete_results": false,
+          "items": [
+            {
+              "id": 1164196935,
+              "node_id": "R_kgDORWQ8Rw",
+              "name": "simple-mcp",
+              "full_name": "chrisabit-it/simple-mcp",
+              "private": false,
+              "owner": {
+                "login": "chrisabit-it",
+                "id": 140162443,
+                "node_id": "U_kgDOCFq1iw",
+                "avatar_url": "https://avatars.githubusercontent.com/u/140162443?v=4",
+                "url": "https://api.github.com/users/chrisabit-it",
+                "html_url": "https://github.com/chrisabit-it",
+                "type": "User"
+              },
+              "html_url": "https://github.com/chrisabit-it/simple-mcp",
+              "description": "Simple MCP Demo Playground",
+              "fork": false,
+              "url": "https://api.github.com/repos/chrisabit-it/simple-mcp",
+              "created_at": "2026-02-22T19:28:13Z",
+              "updated_at": "2026-04-28T09:47:32Z",
+              "pushed_at": "2026-04-28T09:47:28Z",
+              "git_url": "git://github.com/chrisabit-it/simple-mcp.git",
+              "ssh_url": "git@github.com:chrisabit-it/simple-mcp.git",
+              "clone_url": "https://github.com/chrisabit-it/simple-mcp.git",
+              "default_branch": "main"
+            },
+            {
+              "id": 1254679356,
+              "node_id": "R_kgDOSsjjPA",
+              "name": "mcp-playground-demo",
+              "full_name": "bPratyush/mcp-playground-demo",
+              "private": false,
+              "owner": {
+                "login": "bPratyush",
+                "id": 81455621,
+                "node_id": "MDQ6VXNlcjgxNDU1NjIx",
+                "avatar_url": "https://avatars.githubusercontent.com/u/81455621?v=4",
+                "url": "https://api.github.com/users/bPratyush",
+                "html_url": "https://github.com/bPratyush",
+                "type": "User"
+              },
+              "html_url": "https://github.com/bPratyush/mcp-playground-demo",
+              "description": "Demo repository created from an MCP Playground workflow",
+              "fork": false,
+              "url": "https://api.github.com/repos/bPratyush/mcp-playground-demo",
+              "created_at": "2026-05-30T21:52:17Z",
+              "updated_at": "2026-05-30T21:52:50Z",
+              "pushed_at": "2026-05-30T21:52:46Z",
+              "git_url": "git://github.com/bPratyush/mcp-playground-demo.git",
+              "ssh_url": "git@github.com:bPratyush/mcp-playground-demo.git",
+              "clone_url": "https://github.com/bPratyush/mcp-playground-demo.git",
+              "default_branch": "main"
+            },
+            {
+              "id": 1190963998,
+              "node_id": "R_kgDORvyrHg",
+              "name": "agent-layer-playground",
+              "full_name": "lightlayer-dev/agent-layer-playground",
+              "private": false,
+              "owner": {
+                "login": "lightlayer-dev",
+                "id": 218844875,
+                "node_id": "O_kgDODQtOyw",
+                "avatar_url": "https://avatars.githubusercontent.com/u/218844875?v=4",
+                "url": "https://api.github.com/users/lightlayer-dev",
+                "html_url": "https://github.com/lightlayer-dev",
+                "type": "Organization"
+              },
+              "html_url": "https://github.com/lightlayer-dev/agent-layer-playground",
+              "description": "Live playground — 4 agent-ready demo APIs. Try MCP, A2A, llms.txt, agents.txt in action.",
+              "fork": false,
+              "url": "https://api.github.com/repos/lightlayer-dev/agent-layer-playground",
+              "created_at": "2026-03-24T19:42:09Z",
+              "updated_at": "2026-03-25T22:16:19Z",
+              "pushed_at": "2026-03-30T18:17:16Z",
+              "git_url": "git://github.com/lightlayer-dev/agent-layer-playground.git",
+              "ssh_url": "git@github.com:lightlayer-dev/agent-layer-playground.git",
+              "clone_url": "https://github.com/lightlayer-dev/agent-layer-playground.git",
+              "default_branch": "main"
+            },
+            {
+              "id": 1202997435,
+              "node_id": "R_kgDOR7RIuw",
+              "name": "prodmcp-masl",
+              "full_name": "anishchelliahcr/prodmcp-masl",
+              "private": false,
+              "owner": {
+                "login": "anishchelliahcr",
+                "id": 42589712,
+                "node_id": "MDQ6VXNlcjQyNTg5NzEy",
+                "avatar_url": "https://avatars.githubusercontent.com/u/42589712?v=4",
+                "url": "https://api.github.com/users/anishchelliahcr",
+                "html_url": "https://github.com/anishchelliahcr",
+                "type": "User"
+              },
+              "html_url": "https://github.com/anishchelliahcr/prodmcp-masl",
+              "description": "ProdMCP demo app — unified REST + MCP server with Azure AD auth, Gemini tool calling, and React playground",
+              "fork": false,
+              "url": "https://api.github.com/repos/anishchelliahcr/prodmcp-masl",
+              "created_at": "2026-04-06T16:07:56Z",
+              "updated_at": "2026-04-06T16:08:42Z",
+              "pushed_at": "2026-04-06T16:08:36Z",
+              "git_url": "git://github.com/anishchelliahcr/prodmcp-masl.git",
+              "ssh_url": "git@github.com:anishchelliahcr/prodmcp-masl.git",
+              "clone_url": "https://github.com/anishchelliahcr/prodmcp-masl.git",
+              "default_branch": "main"
+            },
+            {
+              "id": 1232079864,
+              "node_id": "R_kgDOSXAL-A",
+              "name": "openclawp",
+              "full_name": "lezama/openclawp",
+              "private": false,
+              "owner": {
+                "login": "lezama",
+                "id": 104869,
+                "node_id": "MDQ6VXNlcjEwNDg2OQ==",
+                "avatar_url": "https://avatars.githubusercontent.com/u/104869?v=4",
+                "url": "https://api.github.com/users/lezama",
+                "html_url": "https://github.com/lezama",
+                "type": "User"
+              },
+              "html_url": "https://github.com/lezama/openclawp",
+              "description": "WordPress-native AI agents in chat blocks, REST, workflows, channels — built on Automattic/agents-api. Demo on Playground, MCP server admin, BYO provider.",
+              "fork": false,
+              "url": "https://api.github.com/repos/lezama/openclawp",
+              "created_at": "2026-05-07T15:10:35Z",
+              "updated_at": "2026-05-22T19:15:48Z",
+              "pushed_at": "2026-05-22T19:15:45Z",
+              "git_url": "git://github.com/lezama/openclawp.git",
+              "ssh_url": "git@github.com:lezama/openclawp.git",
+              "clone_url": "https://github.com/lezama/openclawp.git",
+              "default_branch": "main"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "nodeId": "seed_main",
+      "tool": "github__create_or_update_file",
+      "status": "completed",
+      "typedArgs": {
+        "owner": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.owner.login"
+          }
+        },
+        "repo": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.name"
+          }
+        },
+        "path": "README.md",
+        "content": "# mcp-playground-demo\n\nInitial commit created by the MCP Playground workflow so the default branch has a base to branch from.\n",
+        "message": "Initial commit (seed default branch)",
+        "branch": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.default_branch"
+          }
+        }
+      },
+      "startedAt": 1780180291923,
+      "resolvedArgs": {
+        "owner": "hardikcode-creator",
+        "repo": "mcp-playground-demo",
+        "path": "README.md",
+        "content": "# mcp-playground-demo\n\nInitial commit created by the MCP Playground workflow so the default branch has a base to branch from.\n",
+        "message": "Initial commit (seed default branch)",
+        "branch": "main"
+      },
+      "finishedAt": 1780180293180,
+      "durationMs": 1257,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"content\": {\n    \"name\": \"README.md\",\n    \"path\": \"README.md\",\n    \"sha\": \"e65903475bc1192b0302a0969b8e6ffe46d2c847\",\n    \"size\": 126,\n    \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/contents/README.md?ref=main\",\n    \"html_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo/blob/main/README.md\",\n    \"git_url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/blobs/e65903475bc1192b0302a0969b8e6ffe46d2c847\",\n    \"download_url\": \"https://raw.githubusercontent.com/hardikcode-creator/mcp-playground-demo/main/README.md\",\n    \"type\": \"file\",\n    \"_links\": {\n      \"self\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/contents/README.md?ref=main\",\n      \"git\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/blobs/e65903475bc1192b0302a0969b8e6ffe46d2c847\",\n      \"html\": \"https://github.com/hardikcode-creator/mcp-playground-demo/blob/main/README.md\"\n    }\n  },\n  \"commit\": {\n    \"sha\": \"5d6c730e539a6765d9ee259dcc29b1e86dd63692\",\n    \"node_id\": \"C_kwDOSsknDtoAKDVkNmM3MzBlNTM5YTY3NjVkOWVlMjU5ZGNjMjliMWU4NmRkNjM2OTI\",\n    \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/commits/5d6c730e539a6765d9ee259dcc29b1e86dd63692\",\n    \"html_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo/commit/5d6c730e539a6765d9ee259dcc29b1e86dd63692\",\n    \"author\": {\n      \"name\": \"hardikcode-creator\",\n      \"email\": \"hardikagrawal0045@gmail.com\",\n      \"date\": \"2026-05-30T22:31:32Z\"\n    },\n    \"committer\": {\n      \"name\": \"hardikcode-creator\",\n      \"email\": \"hardikagrawal0045@gmail.com\",\n      \"date\": \"2026-05-30T22:31:32Z\"\n    },\n    \"message\": \"Initial commit (seed default branch)\",\n    \"tree\": {\n      \"sha\": \"9a644c0a351a905544e627632621d9defc1803e1\",\n      \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/trees/9a644c0a351a905544e627632621d9defc1803e1\"\n    },\n    \"parents\": []\n  }\n}"
+          }
+        ],
+        "structuredContent": {
+          "content": {
+            "name": "README.md",
+            "path": "README.md",
+            "sha": "e65903475bc1192b0302a0969b8e6ffe46d2c847",
+            "size": 126,
+            "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/contents/README.md?ref=main",
+            "html_url": "https://github.com/hardikcode-creator/mcp-playground-demo/blob/main/README.md",
+            "git_url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/blobs/e65903475bc1192b0302a0969b8e6ffe46d2c847",
+            "download_url": "https://raw.githubusercontent.com/hardikcode-creator/mcp-playground-demo/main/README.md",
+            "type": "file",
+            "_links": {
+              "self": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/contents/README.md?ref=main",
+              "git": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/blobs/e65903475bc1192b0302a0969b8e6ffe46d2c847",
+              "html": "https://github.com/hardikcode-creator/mcp-playground-demo/blob/main/README.md"
+            }
+          },
+          "commit": {
+            "sha": "5d6c730e539a6765d9ee259dcc29b1e86dd63692",
+            "node_id": "C_kwDOSsknDtoAKDVkNmM3MzBlNTM5YTY3NjVkOWVlMjU5ZGNjMjliMWU4NmRkNjM2OTI",
+            "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/commits/5d6c730e539a6765d9ee259dcc29b1e86dd63692",
+            "html_url": "https://github.com/hardikcode-creator/mcp-playground-demo/commit/5d6c730e539a6765d9ee259dcc29b1e86dd63692",
+            "author": {
+              "name": "hardikcode-creator",
+              "email": "hardikagrawal0045@gmail.com",
+              "date": "2026-05-30T22:31:32Z"
+            },
+            "committer": {
+              "name": "hardikcode-creator",
+              "email": "hardikagrawal0045@gmail.com",
+              "date": "2026-05-30T22:31:32Z"
+            },
+            "message": "Initial commit (seed default branch)",
+            "tree": {
+              "sha": "9a644c0a351a905544e627632621d9defc1803e1",
+              "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/trees/9a644c0a351a905544e627632621d9defc1803e1"
+            },
+            "parents": []
+          }
+        }
+      }
+    },
+    {
+      "nodeId": "create_branch",
+      "tool": "github__create_branch",
+      "status": "completed",
+      "typedArgs": {
+        "owner": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.owner.login"
+          }
+        },
+        "repo": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.name"
+          }
+        },
+        "branch": "feature/welcome",
+        "from_branch": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.default_branch"
+          }
+        }
+      },
+      "startedAt": 1780180293180,
+      "resolvedArgs": {
+        "owner": "hardikcode-creator",
+        "repo": "mcp-playground-demo",
+        "branch": "feature/welcome",
+        "from_branch": "main"
+      },
+      "finishedAt": 1780180294405,
+      "durationMs": 1225,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"ref\": \"refs/heads/feature/welcome\",\n  \"node_id\": \"REF_kwDOSsknDrpyZWZzL2hlYWRzL2ZlYXR1cmUvd2VsY29tZQ\",\n  \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/refs/heads/feature/welcome\",\n  \"object\": {\n    \"sha\": \"5d6c730e539a6765d9ee259dcc29b1e86dd63692\",\n    \"type\": \"commit\",\n    \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/commits/5d6c730e539a6765d9ee259dcc29b1e86dd63692\"\n  }\n}"
+          }
+        ],
+        "structuredContent": {
+          "ref": "refs/heads/feature/welcome",
+          "node_id": "REF_kwDOSsknDrpyZWZzL2hlYWRzL2ZlYXR1cmUvd2VsY29tZQ",
+          "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/refs/heads/feature/welcome",
+          "object": {
+            "sha": "5d6c730e539a6765d9ee259dcc29b1e86dd63692",
+            "type": "commit",
+            "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/commits/5d6c730e539a6765d9ee259dcc29b1e86dd63692"
+          }
+        }
+      }
+    },
+    {
+      "nodeId": "commit_file",
+      "tool": "github__create_or_update_file",
+      "status": "completed",
+      "typedArgs": {
+        "owner": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.owner.login"
+          }
+        },
+        "repo": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.name"
+          }
+        },
+        "path": "WELCOME.md",
+        "content": "# Welcome\n\nThis file was committed by an MCP Playground workflow.\n",
+        "message": "Add WELCOME.md via MCP Playground",
+        "branch": "feature/welcome"
+      },
+      "startedAt": 1780180294405,
+      "resolvedArgs": {
+        "owner": "hardikcode-creator",
+        "repo": "mcp-playground-demo",
+        "path": "WELCOME.md",
+        "content": "# Welcome\n\nThis file was committed by an MCP Playground workflow.\n",
+        "message": "Add WELCOME.md via MCP Playground",
+        "branch": "feature/welcome"
+      },
+      "finishedAt": 1780180295444,
+      "durationMs": 1039,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"content\": {\n    \"name\": \"WELCOME.md\",\n    \"path\": \"WELCOME.md\",\n    \"sha\": \"170caf65ce939412ee634c06e42a7e037813da78\",\n    \"size\": 66,\n    \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/contents/WELCOME.md?ref=feature/welcome\",\n    \"html_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo/blob/feature/welcome/WELCOME.md\",\n    \"git_url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/blobs/170caf65ce939412ee634c06e42a7e037813da78\",\n    \"download_url\": \"https://raw.githubusercontent.com/hardikcode-creator/mcp-playground-demo/feature/welcome/WELCOME.md\",\n    \"type\": \"file\",\n    \"_links\": {\n      \"self\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/contents/WELCOME.md?ref=feature/welcome\",\n      \"git\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/blobs/170caf65ce939412ee634c06e42a7e037813da78\",\n      \"html\": \"https://github.com/hardikcode-creator/mcp-playground-demo/blob/feature/welcome/WELCOME.md\"\n    }\n  },\n  \"commit\": {\n    \"sha\": \"62ebbe340985df58254a9db711f9b77b31174794\",\n    \"node_id\": \"C_kwDOSsknDtoAKDYyZWJiZTM0MDk4NWRmNTgyNTRhOWRiNzExZjliNzdiMzExNzQ3OTQ\",\n    \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/commits/62ebbe340985df58254a9db711f9b77b31174794\",\n    \"html_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo/commit/62ebbe340985df58254a9db711f9b77b31174794\",\n    \"author\": {\n      \"name\": \"hardikcode-creator\",\n      \"email\": \"hardikagrawal0045@gmail.com\",\n      \"date\": \"2026-05-30T22:31:35Z\"\n    },\n    \"committer\": {\n      \"name\": \"hardikcode-creator\",\n      \"email\": \"hardikagrawal0045@gmail.com\",\n      \"date\": \"2026-05-30T22:31:35Z\"\n    },\n    \"message\": \"Add WELCOME.md via MCP Playground\",\n    \"tree\": {\n      \"sha\": \"f0478020741227ae0db89d8151786af8cda84f4a\",\n      \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/trees/f0478020741227ae0db89d8151786af8cda84f4a\"\n    },\n    \"parents\": [\n      {\n        \"sha\": \"5d6c730e539a6765d9ee259dcc29b1e86dd63692\",\n        \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/commits/5d6c730e539a6765d9ee259dcc29b1e86dd63692\",\n        \"html_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo/commit/5d6c730e539a6765d9ee259dcc29b1e86dd63692\"\n      }\n    ]\n  }\n}"
+          }
+        ],
+        "structuredContent": {
+          "content": {
+            "name": "WELCOME.md",
+            "path": "WELCOME.md",
+            "sha": "170caf65ce939412ee634c06e42a7e037813da78",
+            "size": 66,
+            "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/contents/WELCOME.md?ref=feature/welcome",
+            "html_url": "https://github.com/hardikcode-creator/mcp-playground-demo/blob/feature/welcome/WELCOME.md",
+            "git_url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/blobs/170caf65ce939412ee634c06e42a7e037813da78",
+            "download_url": "https://raw.githubusercontent.com/hardikcode-creator/mcp-playground-demo/feature/welcome/WELCOME.md",
+            "type": "file",
+            "_links": {
+              "self": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/contents/WELCOME.md?ref=feature/welcome",
+              "git": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/blobs/170caf65ce939412ee634c06e42a7e037813da78",
+              "html": "https://github.com/hardikcode-creator/mcp-playground-demo/blob/feature/welcome/WELCOME.md"
+            }
+          },
+          "commit": {
+            "sha": "62ebbe340985df58254a9db711f9b77b31174794",
+            "node_id": "C_kwDOSsknDtoAKDYyZWJiZTM0MDk4NWRmNTgyNTRhOWRiNzExZjliNzdiMzExNzQ3OTQ",
+            "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/commits/62ebbe340985df58254a9db711f9b77b31174794",
+            "html_url": "https://github.com/hardikcode-creator/mcp-playground-demo/commit/62ebbe340985df58254a9db711f9b77b31174794",
+            "author": {
+              "name": "hardikcode-creator",
+              "email": "hardikagrawal0045@gmail.com",
+              "date": "2026-05-30T22:31:35Z"
+            },
+            "committer": {
+              "name": "hardikcode-creator",
+              "email": "hardikagrawal0045@gmail.com",
+              "date": "2026-05-30T22:31:35Z"
+            },
+            "message": "Add WELCOME.md via MCP Playground",
+            "tree": {
+              "sha": "f0478020741227ae0db89d8151786af8cda84f4a",
+              "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/trees/f0478020741227ae0db89d8151786af8cda84f4a"
+            },
+            "parents": [
+              {
+                "sha": "5d6c730e539a6765d9ee259dcc29b1e86dd63692",
+                "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/commits/5d6c730e539a6765d9ee259dcc29b1e86dd63692",
+                "html_url": "https://github.com/hardikcode-creator/mcp-playground-demo/commit/5d6c730e539a6765d9ee259dcc29b1e86dd63692"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "nodeId": "list_commits",
+      "tool": "github__list_commits",
+      "status": "completed",
+      "typedArgs": {
+        "owner": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.owner.login"
+          }
+        },
+        "repo": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.name"
+          }
+        },
+        "perPage": 5
+      },
+      "startedAt": 1780180295445,
+      "resolvedArgs": {
+        "owner": "hardikcode-creator",
+        "repo": "mcp-playground-demo",
+        "perPage": 5
+      },
+      "finishedAt": 1780180337908,
+      "durationMs": 42463,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "[\n  {\n    \"sha\": \"5d6c730e539a6765d9ee259dcc29b1e86dd63692\",\n    \"node_id\": \"C_kwDOSsknDtoAKDVkNmM3MzBlNTM5YTY3NjVkOWVlMjU5ZGNjMjliMWU4NmRkNjM2OTI\",\n    \"commit\": {\n      \"author\": {\n        \"name\": \"hardikcode-creator\",\n        \"email\": \"hardikagrawal0045@gmail.com\",\n        \"date\": \"2026-05-30T22:31:32Z\"\n      },\n      \"committer\": {\n        \"name\": \"hardikcode-creator\",\n        \"email\": \"hardikagrawal0045@gmail.com\",\n        \"date\": \"2026-05-30T22:31:32Z\"\n      },\n      \"message\": \"Initial commit (seed default branch)\",\n      \"tree\": {\n        \"sha\": \"9a644c0a351a905544e627632621d9defc1803e1\",\n        \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/trees/9a644c0a351a905544e627632621d9defc1803e1\"\n      },\n      \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/commits/5d6c730e539a6765d9ee259dcc29b1e86dd63692\",\n      \"comment_count\": 0,\n      \"verification\": {\n        \"verified\": false,\n        \"reason\": \"unsigned\",\n        \"signature\": null,\n        \"payload\": null,\n        \"verified_at\": null\n      }\n    },\n    \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/commits/5d6c730e539a6765d9ee259dcc29b1e86dd63692\",\n    \"html_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo/commit/5d6c730e539a6765d9ee259dcc29b1e86dd63692\",\n    \"comments_url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/commits/5d6c730e539a6765d9ee259dcc29b1e86dd63692/comments\",\n    \"author\": {\n      \"login\": \"hardikcode-creator\",\n      \"id\": 179830333,\n      \"node_id\": \"U_kgDOCrf-PQ\",\n      \"avatar_url\": \"https://avatars.githubusercontent.com/u/179830333?v=4\",\n      \"gravatar_id\": \"\",\n      \"url\": \"https://api.github.com/users/hardikcode-creator\",\n      \"html_url\": \"https://github.com/hardikcode-creator\",\n      \"followers_url\": \"https://api.github.com/users/hardikcode-creator/followers\",\n      \"following_url\": \"https://api.github.com/users/hardikcode-creator/following{/other_user}\",\n      \"gists_url\": \"https://api.github.com/users/hardikcode-creator/gists{/gist_id}\",\n      \"starred_url\": \"https://api.github.com/users/hardikcode-creator/starred{/owner}{/repo}\",\n      \"subscriptions_url\": \"https://api.github.com/users/hardikcode-creator/subscriptions\",\n      \"organizations_url\": \"https://api.github.com/users/hardikcode-creator/orgs\",\n      \"repos_url\": \"https://api.github.com/users/hardikcode-creator/repos\",\n      \"events_url\": \"https://api.github.com/users/hardikcode-creator/events{/privacy}\",\n      \"received_events_url\": \"https://api.github.com/users/hardikcode-creator/received_events\",\n      \"type\": \"User\",\n      \"user_view_type\": \"public\",\n      \"site_admin\": false\n    },\n    \"committer\": {\n      \"login\": \"hardikcode-creator\",\n      \"id\": 179830333,\n      \"node_id\": \"U_kgDOCrf-PQ\",\n      \"avatar_url\": \"https://avatars.githubusercontent.com/u/179830333?v=4\",\n      \"gravatar_id\": \"\",\n      \"url\": \"https://api.github.com/users/hardikcode-creator\",\n      \"html_url\": \"https://github.com/hardikcode-creator\",\n      \"followers_url\": \"https://api.github.com/users/hardikcode-creator/followers\",\n      \"following_url\": \"https://api.github.com/users/hardikcode-creator/following{/other_user}\",\n      \"gists_url\": \"https://api.github.com/users/hardikcode-creator/gists{/gist_id}\",\n      \"starred_url\": \"https://api.github.com/users/hardikcode-creator/starred{/owner}{/repo}\",\n      \"subscriptions_url\": \"https://api.github.com/users/hardikcode-creator/subscriptions\",\n      \"organizations_url\": \"https://api.github.com/users/hardikcode-creator/orgs\",\n      \"repos_url\": \"https://api.github.com/users/hardikcode-creator/repos\",\n      \"events_url\": \"https://api.github.com/users/hardikcode-creator/events{/privacy}\",\n      \"received_events_url\": \"https://api.github.com/users/hardikcode-creator/received_events\",\n      \"type\": \"User\",\n      \"user_view_type\": \"public\",\n      \"site_admin\": false\n    },\n    \"parents\": []\n  }\n]"
+          }
+        ],
+        "structuredContent": [
+          {
+            "sha": "5d6c730e539a6765d9ee259dcc29b1e86dd63692",
+            "node_id": "C_kwDOSsknDtoAKDVkNmM3MzBlNTM5YTY3NjVkOWVlMjU5ZGNjMjliMWU4NmRkNjM2OTI",
+            "commit": {
+              "author": {
+                "name": "hardikcode-creator",
+                "email": "hardikagrawal0045@gmail.com",
+                "date": "2026-05-30T22:31:32Z"
+              },
+              "committer": {
+                "name": "hardikcode-creator",
+                "email": "hardikagrawal0045@gmail.com",
+                "date": "2026-05-30T22:31:32Z"
+              },
+              "message": "Initial commit (seed default branch)",
+              "tree": {
+                "sha": "9a644c0a351a905544e627632621d9defc1803e1",
+                "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/trees/9a644c0a351a905544e627632621d9defc1803e1"
+              },
+              "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/git/commits/5d6c730e539a6765d9ee259dcc29b1e86dd63692",
+              "comment_count": 0,
+              "verification": {
+                "verified": false,
+                "reason": "unsigned",
+                "signature": null,
+                "payload": null,
+                "verified_at": null
+              }
+            },
+            "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/commits/5d6c730e539a6765d9ee259dcc29b1e86dd63692",
+            "html_url": "https://github.com/hardikcode-creator/mcp-playground-demo/commit/5d6c730e539a6765d9ee259dcc29b1e86dd63692",
+            "comments_url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/commits/5d6c730e539a6765d9ee259dcc29b1e86dd63692/comments",
+            "author": {
+              "login": "hardikcode-creator",
+              "id": 179830333,
+              "node_id": "U_kgDOCrf-PQ",
+              "avatar_url": "https://avatars.githubusercontent.com/u/179830333?v=4",
+              "gravatar_id": "",
+              "url": "https://api.github.com/users/hardikcode-creator",
+              "html_url": "https://github.com/hardikcode-creator",
+              "followers_url": "https://api.github.com/users/hardikcode-creator/followers",
+              "following_url": "https://api.github.com/users/hardikcode-creator/following{/other_user}",
+              "gists_url": "https://api.github.com/users/hardikcode-creator/gists{/gist_id}",
+              "starred_url": "https://api.github.com/users/hardikcode-creator/starred{/owner}{/repo}",
+              "subscriptions_url": "https://api.github.com/users/hardikcode-creator/subscriptions",
+              "organizations_url": "https://api.github.com/users/hardikcode-creator/orgs",
+              "repos_url": "https://api.github.com/users/hardikcode-creator/repos",
+              "events_url": "https://api.github.com/users/hardikcode-creator/events{/privacy}",
+              "received_events_url": "https://api.github.com/users/hardikcode-creator/received_events",
+              "type": "User",
+              "user_view_type": "public",
+              "site_admin": false
+            },
+            "committer": {
+              "login": "hardikcode-creator",
+              "id": 179830333,
+              "node_id": "U_kgDOCrf-PQ",
+              "avatar_url": "https://avatars.githubusercontent.com/u/179830333?v=4",
+              "gravatar_id": "",
+              "url": "https://api.github.com/users/hardikcode-creator",
+              "html_url": "https://github.com/hardikcode-creator",
+              "followers_url": "https://api.github.com/users/hardikcode-creator/followers",
+              "following_url": "https://api.github.com/users/hardikcode-creator/following{/other_user}",
+              "gists_url": "https://api.github.com/users/hardikcode-creator/gists{/gist_id}",
+              "starred_url": "https://api.github.com/users/hardikcode-creator/starred{/owner}{/repo}",
+              "subscriptions_url": "https://api.github.com/users/hardikcode-creator/subscriptions",
+              "organizations_url": "https://api.github.com/users/hardikcode-creator/orgs",
+              "repos_url": "https://api.github.com/users/hardikcode-creator/repos",
+              "events_url": "https://api.github.com/users/hardikcode-creator/events{/privacy}",
+              "received_events_url": "https://api.github.com/users/hardikcode-creator/received_events",
+              "type": "User",
+              "user_view_type": "public",
+              "site_admin": false
+            },
+            "parents": []
+          }
+        ]
+      }
+    },
+    {
+      "nodeId": "open_pr",
+      "tool": "github__create_pull_request",
+      "status": "completed",
+      "typedArgs": {
+        "owner": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.owner.login"
+          }
+        },
+        "repo": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.name"
+          }
+        },
+        "title": "Add WELCOME.md",
+        "body": "Opening a pull request from the MCP Playground workflow demo.",
+        "head": "feature/welcome",
+        "base": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.default_branch"
+          }
+        }
+      },
+      "startedAt": 1780180337908,
+      "resolvedArgs": {
+        "owner": "hardikcode-creator",
+        "repo": "mcp-playground-demo",
+        "title": "Add WELCOME.md",
+        "body": "Opening a pull request from the MCP Playground workflow demo.",
+        "head": "feature/welcome",
+        "base": "main"
+      },
+      "finishedAt": 1780180353794,
+      "durationMs": 15886,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/pulls/1\",\n  \"id\": 3775076195,\n  \"node_id\": \"PR_kwDOSsknDs7hAxdj\",\n  \"html_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo/pull/1\",\n  \"diff_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo/pull/1.diff\",\n  \"patch_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo/pull/1.patch\",\n  \"issue_url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/issues/1\",\n  \"number\": 1,\n  \"state\": \"open\",\n  \"locked\": false,\n  \"title\": \"Add WELCOME.md\",\n  \"user\": {\n    \"login\": \"hardikcode-creator\",\n    \"id\": 179830333,\n    \"avatar_url\": \"https://avatars.githubusercontent.com/u/179830333?v=4\",\n    \"url\": \"https://api.github.com/users/hardikcode-creator\",\n    \"html_url\": \"https://github.com/hardikcode-creator\"\n  },\n  \"body\": \"Opening a pull request from the MCP Playground workflow demo.\",\n  \"created_at\": \"2026-05-30T22:32:33Z\",\n  \"updated_at\": \"2026-05-30T22:32:33Z\",\n  \"closed_at\": null,\n  \"merged_at\": null,\n  \"merge_commit_sha\": null,\n  \"assignee\": null,\n  \"assignees\": [],\n  \"requested_reviewers\": [],\n  \"labels\": [],\n  \"head\": {\n    \"label\": \"hardikcode-creator:feature/welcome\",\n    \"ref\": \"feature/welcome\",\n    \"sha\": \"62ebbe340985df58254a9db711f9b77b31174794\",\n    \"user\": {\n      \"login\": \"hardikcode-creator\",\n      \"id\": 179830333,\n      \"avatar_url\": \"https://avatars.githubusercontent.com/u/179830333?v=4\",\n      \"url\": \"https://api.github.com/users/hardikcode-creator\",\n      \"html_url\": \"https://github.com/hardikcode-creator\"\n    },\n    \"repo\": {\n      \"id\": 1254696718,\n      \"node_id\": \"R_kgDOSsknDg\",\n      \"name\": \"mcp-playground-demo\",\n      \"full_name\": \"hardikcode-creator/mcp-playground-demo\",\n      \"private\": false,\n      \"owner\": {\n        \"login\": \"hardikcode-creator\",\n        \"id\": 179830333,\n        \"node_id\": \"U_kgDOCrf-PQ\",\n        \"avatar_url\": \"https://avatars.githubusercontent.com/u/179830333?v=4\",\n        \"url\": \"https://api.github.com/users/hardikcode-creator\",\n        \"html_url\": \"https://github.com/hardikcode-creator\",\n        \"type\": \"User\"\n      },\n      \"html_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo\",\n      \"description\": \"Demo repository created from an MCP Playground workflow\",\n      \"fork\": false,\n      \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo\",\n      \"created_at\": \"2026-05-30T22:31:30Z\",\n      \"updated_at\": \"2026-05-30T22:31:36Z\",\n      \"pushed_at\": \"2026-05-30T22:31:35Z\",\n      \"git_url\": \"git://github.com/hardikcode-creator/mcp-playground-demo.git\",\n      \"ssh_url\": \"git@github.com:hardikcode-creator/mcp-playground-demo.git\",\n      \"clone_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo.git\",\n      \"default_branch\": \"main\"\n    }\n  },\n  \"base\": {\n    \"label\": \"hardikcode-creator:main\",\n    \"ref\": \"main\",\n    \"sha\": \"5d6c730e539a6765d9ee259dcc29b1e86dd63692\",\n    \"user\": {\n      \"login\": \"hardikcode-creator\",\n      \"id\": 179830333,\n      \"avatar_url\": \"https://avatars.githubusercontent.com/u/179830333?v=4\",\n      \"url\": \"https://api.github.com/users/hardikcode-creator\",\n      \"html_url\": \"https://github.com/hardikcode-creator\"\n    },\n    \"repo\": {\n      \"id\": 1254696718,\n      \"node_id\": \"R_kgDOSsknDg\",\n      \"name\": \"mcp-playground-demo\",\n      \"full_name\": \"hardikcode-creator/mcp-playground-demo\",\n      \"private\": false,\n      \"owner\": {\n        \"login\": \"hardikcode-creator\",\n        \"id\": 179830333,\n        \"node_id\": \"U_kgDOCrf-PQ\",\n        \"avatar_url\": \"https://avatars.githubusercontent.com/u/179830333?v=4\",\n        \"url\": \"https://api.github.com/users/hardikcode-creator\",\n        \"html_url\": \"https://github.com/hardikcode-creator\",\n        \"type\": \"User\"\n      },\n      \"html_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo\",\n      \"description\": \"Demo repository created from an MCP Playground workflow\",\n      \"fork\": false,\n      \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo\",\n      \"created_at\": \"2026-05-30T22:31:30Z\",\n      \"updated_at\": \"2026-05-30T22:31:36Z\",\n      \"pushed_at\": \"2026-05-30T22:31:35Z\",\n      \"git_url\": \"git://github.com/hardikcode-creator/mcp-playground-demo.git\",\n      \"ssh_url\": \"git@github.com:hardikcode-creator/mcp-playground-demo.git\",\n      \"clone_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo.git\",\n      \"default_branch\": \"main\"\n    }\n  }\n}"
+          }
+        ],
+        "structuredContent": {
+          "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/pulls/1",
+          "id": 3775076195,
+          "node_id": "PR_kwDOSsknDs7hAxdj",
+          "html_url": "https://github.com/hardikcode-creator/mcp-playground-demo/pull/1",
+          "diff_url": "https://github.com/hardikcode-creator/mcp-playground-demo/pull/1.diff",
+          "patch_url": "https://github.com/hardikcode-creator/mcp-playground-demo/pull/1.patch",
+          "issue_url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/issues/1",
+          "number": 1,
+          "state": "open",
+          "locked": false,
+          "title": "Add WELCOME.md",
+          "user": {
+            "login": "hardikcode-creator",
+            "id": 179830333,
+            "avatar_url": "https://avatars.githubusercontent.com/u/179830333?v=4",
+            "url": "https://api.github.com/users/hardikcode-creator",
+            "html_url": "https://github.com/hardikcode-creator"
+          },
+          "body": "Opening a pull request from the MCP Playground workflow demo.",
+          "created_at": "2026-05-30T22:32:33Z",
+          "updated_at": "2026-05-30T22:32:33Z",
+          "closed_at": null,
+          "merged_at": null,
+          "merge_commit_sha": null,
+          "assignee": null,
+          "assignees": [],
+          "requested_reviewers": [],
+          "labels": [],
+          "head": {
+            "label": "hardikcode-creator:feature/welcome",
+            "ref": "feature/welcome",
+            "sha": "62ebbe340985df58254a9db711f9b77b31174794",
+            "user": {
+              "login": "hardikcode-creator",
+              "id": 179830333,
+              "avatar_url": "https://avatars.githubusercontent.com/u/179830333?v=4",
+              "url": "https://api.github.com/users/hardikcode-creator",
+              "html_url": "https://github.com/hardikcode-creator"
+            },
+            "repo": {
+              "id": 1254696718,
+              "node_id": "R_kgDOSsknDg",
+              "name": "mcp-playground-demo",
+              "full_name": "hardikcode-creator/mcp-playground-demo",
+              "private": false,
+              "owner": {
+                "login": "hardikcode-creator",
+                "id": 179830333,
+                "node_id": "U_kgDOCrf-PQ",
+                "avatar_url": "https://avatars.githubusercontent.com/u/179830333?v=4",
+                "url": "https://api.github.com/users/hardikcode-creator",
+                "html_url": "https://github.com/hardikcode-creator",
+                "type": "User"
+              },
+              "html_url": "https://github.com/hardikcode-creator/mcp-playground-demo",
+              "description": "Demo repository created from an MCP Playground workflow",
+              "fork": false,
+              "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo",
+              "created_at": "2026-05-30T22:31:30Z",
+              "updated_at": "2026-05-30T22:31:36Z",
+              "pushed_at": "2026-05-30T22:31:35Z",
+              "git_url": "git://github.com/hardikcode-creator/mcp-playground-demo.git",
+              "ssh_url": "git@github.com:hardikcode-creator/mcp-playground-demo.git",
+              "clone_url": "https://github.com/hardikcode-creator/mcp-playground-demo.git",
+              "default_branch": "main"
+            }
+          },
+          "base": {
+            "label": "hardikcode-creator:main",
+            "ref": "main",
+            "sha": "5d6c730e539a6765d9ee259dcc29b1e86dd63692",
+            "user": {
+              "login": "hardikcode-creator",
+              "id": 179830333,
+              "avatar_url": "https://avatars.githubusercontent.com/u/179830333?v=4",
+              "url": "https://api.github.com/users/hardikcode-creator",
+              "html_url": "https://github.com/hardikcode-creator"
+            },
+            "repo": {
+              "id": 1254696718,
+              "node_id": "R_kgDOSsknDg",
+              "name": "mcp-playground-demo",
+              "full_name": "hardikcode-creator/mcp-playground-demo",
+              "private": false,
+              "owner": {
+                "login": "hardikcode-creator",
+                "id": 179830333,
+                "node_id": "U_kgDOCrf-PQ",
+                "avatar_url": "https://avatars.githubusercontent.com/u/179830333?v=4",
+                "url": "https://api.github.com/users/hardikcode-creator",
+                "html_url": "https://github.com/hardikcode-creator",
+                "type": "User"
+              },
+              "html_url": "https://github.com/hardikcode-creator/mcp-playground-demo",
+              "description": "Demo repository created from an MCP Playground workflow",
+              "fork": false,
+              "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo",
+              "created_at": "2026-05-30T22:31:30Z",
+              "updated_at": "2026-05-30T22:31:36Z",
+              "pushed_at": "2026-05-30T22:31:35Z",
+              "git_url": "git://github.com/hardikcode-creator/mcp-playground-demo.git",
+              "ssh_url": "git@github.com:hardikcode-creator/mcp-playground-demo.git",
+              "clone_url": "https://github.com/hardikcode-creator/mcp-playground-demo.git",
+              "default_branch": "main"
+            }
+          }
+        }
+      }
+    },
+    {
+      "nodeId": "inspect_pr",
+      "tool": "github__get_pull_request",
+      "status": "completed",
+      "typedArgs": {
+        "owner": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.owner.login"
+          }
+        },
+        "repo": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.name"
+          }
+        },
+        "pull_number": {
+          "$ref": {
+            "nodeId": "open_pr",
+            "path": "$.structuredContent.number"
+          }
+        }
+      },
+      "startedAt": 1780180353794,
+      "resolvedArgs": {
+        "owner": "hardikcode-creator",
+        "repo": "mcp-playground-demo",
+        "pull_number": 1
+      },
+      "finishedAt": 1780180354231,
+      "durationMs": 437,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/pulls/1\",\n  \"id\": 3775076195,\n  \"node_id\": \"PR_kwDOSsknDs7hAxdj\",\n  \"html_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo/pull/1\",\n  \"diff_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo/pull/1.diff\",\n  \"patch_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo/pull/1.patch\",\n  \"issue_url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/issues/1\",\n  \"number\": 1,\n  \"state\": \"open\",\n  \"locked\": false,\n  \"title\": \"Add WELCOME.md\",\n  \"user\": {\n    \"login\": \"hardikcode-creator\",\n    \"id\": 179830333,\n    \"avatar_url\": \"https://avatars.githubusercontent.com/u/179830333?v=4\",\n    \"url\": \"https://api.github.com/users/hardikcode-creator\",\n    \"html_url\": \"https://github.com/hardikcode-creator\"\n  },\n  \"body\": \"Opening a pull request from the MCP Playground workflow demo.\",\n  \"created_at\": \"2026-05-30T22:32:33Z\",\n  \"updated_at\": \"2026-05-30T22:32:33Z\",\n  \"closed_at\": null,\n  \"merged_at\": null,\n  \"merge_commit_sha\": null,\n  \"assignee\": null,\n  \"assignees\": [],\n  \"requested_reviewers\": [],\n  \"labels\": [],\n  \"head\": {\n    \"label\": \"hardikcode-creator:feature/welcome\",\n    \"ref\": \"feature/welcome\",\n    \"sha\": \"62ebbe340985df58254a9db711f9b77b31174794\",\n    \"user\": {\n      \"login\": \"hardikcode-creator\",\n      \"id\": 179830333,\n      \"avatar_url\": \"https://avatars.githubusercontent.com/u/179830333?v=4\",\n      \"url\": \"https://api.github.com/users/hardikcode-creator\",\n      \"html_url\": \"https://github.com/hardikcode-creator\"\n    },\n    \"repo\": {\n      \"id\": 1254696718,\n      \"node_id\": \"R_kgDOSsknDg\",\n      \"name\": \"mcp-playground-demo\",\n      \"full_name\": \"hardikcode-creator/mcp-playground-demo\",\n      \"private\": false,\n      \"owner\": {\n        \"login\": \"hardikcode-creator\",\n        \"id\": 179830333,\n        \"node_id\": \"U_kgDOCrf-PQ\",\n        \"avatar_url\": \"https://avatars.githubusercontent.com/u/179830333?v=4\",\n        \"url\": \"https://api.github.com/users/hardikcode-creator\",\n        \"html_url\": \"https://github.com/hardikcode-creator\",\n        \"type\": \"User\"\n      },\n      \"html_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo\",\n      \"description\": \"Demo repository created from an MCP Playground workflow\",\n      \"fork\": false,\n      \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo\",\n      \"created_at\": \"2026-05-30T22:31:30Z\",\n      \"updated_at\": \"2026-05-30T22:31:36Z\",\n      \"pushed_at\": \"2026-05-30T22:31:35Z\",\n      \"git_url\": \"git://github.com/hardikcode-creator/mcp-playground-demo.git\",\n      \"ssh_url\": \"git@github.com:hardikcode-creator/mcp-playground-demo.git\",\n      \"clone_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo.git\",\n      \"default_branch\": \"main\"\n    }\n  },\n  \"base\": {\n    \"label\": \"hardikcode-creator:main\",\n    \"ref\": \"main\",\n    \"sha\": \"5d6c730e539a6765d9ee259dcc29b1e86dd63692\",\n    \"user\": {\n      \"login\": \"hardikcode-creator\",\n      \"id\": 179830333,\n      \"avatar_url\": \"https://avatars.githubusercontent.com/u/179830333?v=4\",\n      \"url\": \"https://api.github.com/users/hardikcode-creator\",\n      \"html_url\": \"https://github.com/hardikcode-creator\"\n    },\n    \"repo\": {\n      \"id\": 1254696718,\n      \"node_id\": \"R_kgDOSsknDg\",\n      \"name\": \"mcp-playground-demo\",\n      \"full_name\": \"hardikcode-creator/mcp-playground-demo\",\n      \"private\": false,\n      \"owner\": {\n        \"login\": \"hardikcode-creator\",\n        \"id\": 179830333,\n        \"node_id\": \"U_kgDOCrf-PQ\",\n        \"avatar_url\": \"https://avatars.githubusercontent.com/u/179830333?v=4\",\n        \"url\": \"https://api.github.com/users/hardikcode-creator\",\n        \"html_url\": \"https://github.com/hardikcode-creator\",\n        \"type\": \"User\"\n      },\n      \"html_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo\",\n      \"description\": \"Demo repository created from an MCP Playground workflow\",\n      \"fork\": false,\n      \"url\": \"https://api.github.com/repos/hardikcode-creator/mcp-playground-demo\",\n      \"created_at\": \"2026-05-30T22:31:30Z\",\n      \"updated_at\": \"2026-05-30T22:31:36Z\",\n      \"pushed_at\": \"2026-05-30T22:31:35Z\",\n      \"git_url\": \"git://github.com/hardikcode-creator/mcp-playground-demo.git\",\n      \"ssh_url\": \"git@github.com:hardikcode-creator/mcp-playground-demo.git\",\n      \"clone_url\": \"https://github.com/hardikcode-creator/mcp-playground-demo.git\",\n      \"default_branch\": \"main\"\n    }\n  }\n}"
+          }
+        ],
+        "structuredContent": {
+          "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/pulls/1",
+          "id": 3775076195,
+          "node_id": "PR_kwDOSsknDs7hAxdj",
+          "html_url": "https://github.com/hardikcode-creator/mcp-playground-demo/pull/1",
+          "diff_url": "https://github.com/hardikcode-creator/mcp-playground-demo/pull/1.diff",
+          "patch_url": "https://github.com/hardikcode-creator/mcp-playground-demo/pull/1.patch",
+          "issue_url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo/issues/1",
+          "number": 1,
+          "state": "open",
+          "locked": false,
+          "title": "Add WELCOME.md",
+          "user": {
+            "login": "hardikcode-creator",
+            "id": 179830333,
+            "avatar_url": "https://avatars.githubusercontent.com/u/179830333?v=4",
+            "url": "https://api.github.com/users/hardikcode-creator",
+            "html_url": "https://github.com/hardikcode-creator"
+          },
+          "body": "Opening a pull request from the MCP Playground workflow demo.",
+          "created_at": "2026-05-30T22:32:33Z",
+          "updated_at": "2026-05-30T22:32:33Z",
+          "closed_at": null,
+          "merged_at": null,
+          "merge_commit_sha": null,
+          "assignee": null,
+          "assignees": [],
+          "requested_reviewers": [],
+          "labels": [],
+          "head": {
+            "label": "hardikcode-creator:feature/welcome",
+            "ref": "feature/welcome",
+            "sha": "62ebbe340985df58254a9db711f9b77b31174794",
+            "user": {
+              "login": "hardikcode-creator",
+              "id": 179830333,
+              "avatar_url": "https://avatars.githubusercontent.com/u/179830333?v=4",
+              "url": "https://api.github.com/users/hardikcode-creator",
+              "html_url": "https://github.com/hardikcode-creator"
+            },
+            "repo": {
+              "id": 1254696718,
+              "node_id": "R_kgDOSsknDg",
+              "name": "mcp-playground-demo",
+              "full_name": "hardikcode-creator/mcp-playground-demo",
+              "private": false,
+              "owner": {
+                "login": "hardikcode-creator",
+                "id": 179830333,
+                "node_id": "U_kgDOCrf-PQ",
+                "avatar_url": "https://avatars.githubusercontent.com/u/179830333?v=4",
+                "url": "https://api.github.com/users/hardikcode-creator",
+                "html_url": "https://github.com/hardikcode-creator",
+                "type": "User"
+              },
+              "html_url": "https://github.com/hardikcode-creator/mcp-playground-demo",
+              "description": "Demo repository created from an MCP Playground workflow",
+              "fork": false,
+              "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo",
+              "created_at": "2026-05-30T22:31:30Z",
+              "updated_at": "2026-05-30T22:31:36Z",
+              "pushed_at": "2026-05-30T22:31:35Z",
+              "git_url": "git://github.com/hardikcode-creator/mcp-playground-demo.git",
+              "ssh_url": "git@github.com:hardikcode-creator/mcp-playground-demo.git",
+              "clone_url": "https://github.com/hardikcode-creator/mcp-playground-demo.git",
+              "default_branch": "main"
+            }
+          },
+          "base": {
+            "label": "hardikcode-creator:main",
+            "ref": "main",
+            "sha": "5d6c730e539a6765d9ee259dcc29b1e86dd63692",
+            "user": {
+              "login": "hardikcode-creator",
+              "id": 179830333,
+              "avatar_url": "https://avatars.githubusercontent.com/u/179830333?v=4",
+              "url": "https://api.github.com/users/hardikcode-creator",
+              "html_url": "https://github.com/hardikcode-creator"
+            },
+            "repo": {
+              "id": 1254696718,
+              "node_id": "R_kgDOSsknDg",
+              "name": "mcp-playground-demo",
+              "full_name": "hardikcode-creator/mcp-playground-demo",
+              "private": false,
+              "owner": {
+                "login": "hardikcode-creator",
+                "id": 179830333,
+                "node_id": "U_kgDOCrf-PQ",
+                "avatar_url": "https://avatars.githubusercontent.com/u/179830333?v=4",
+                "url": "https://api.github.com/users/hardikcode-creator",
+                "html_url": "https://github.com/hardikcode-creator",
+                "type": "User"
+              },
+              "html_url": "https://github.com/hardikcode-creator/mcp-playground-demo",
+              "description": "Demo repository created from an MCP Playground workflow",
+              "fork": false,
+              "url": "https://api.github.com/repos/hardikcode-creator/mcp-playground-demo",
+              "created_at": "2026-05-30T22:31:30Z",
+              "updated_at": "2026-05-30T22:31:36Z",
+              "pushed_at": "2026-05-30T22:31:35Z",
+              "git_url": "git://github.com/hardikcode-creator/mcp-playground-demo.git",
+              "ssh_url": "git@github.com:hardikcode-creator/mcp-playground-demo.git",
+              "clone_url": "https://github.com/hardikcode-creator/mcp-playground-demo.git",
+              "default_branch": "main"
+            }
+          }
+        }
+      }
+    },
+    {
+      "nodeId": "merge_pr",
+      "tool": "github__merge_pull_request",
+      "status": "completed",
+      "typedArgs": {
+        "owner": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.owner.login"
+          }
+        },
+        "repo": {
+          "$ref": {
+            "nodeId": "create_repo",
+            "path": "$.structuredContent.name"
+          }
+        },
+        "pull_number": {
+          "$ref": {
+            "nodeId": "open_pr",
+            "path": "$.structuredContent.number"
+          }
+        },
+        "merge_method": "squash",
+        "commit_title": "Add WELCOME.md (#1)"
+      },
+      "startedAt": 1780180354232,
+      "resolvedArgs": {
+        "owner": "hardikcode-creator",
+        "repo": "mcp-playground-demo",
+        "pull_number": 1,
+        "merge_method": "squash",
+        "commit_title": "Add WELCOME.md (#1)"
+      },
+      "finishedAt": 1780180356118,
+      "durationMs": 1886,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"sha\": \"97fc411d44d69d35071b8fd1c77de1ffcdc37247\",\n  \"merged\": true,\n  \"message\": \"Pull Request successfully merged\"\n}"
+          }
+        ],
+        "structuredContent": {
+          "sha": "97fc411d44d69d35071b8fd1c77de1ffcdc37247",
+          "merged": true,
+          "message": "Pull Request successfully merged"
+        }
+      }
+    }
+  ]
+}
