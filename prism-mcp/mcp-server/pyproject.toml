@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "collector-mcp-server"
+version = "1.0.0"
+description = "Prism collector MCP server (wraps the Prism REST API as MCP tools)."
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp",
+    "httpx>=0.25.0",
+    "requests>=2.31.0",
+]
+
+[project.scripts]
+collector-mcp-server = "server:main"
+
+# Run directly as a script (uv run python server.py); do not build/install as a package.
+[tool.uv]
+package = false
