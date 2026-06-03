@@ -11,12 +11,9 @@ description: The workflow model - a DAG of tool-call nodes spanning many MCP ser
 A workflow in MCP Playground is a **directed acyclic graph (DAG) of tool
 calls**. Each node names one tool and its arguments; edges express ordering and
 data flow. The engine figures out what can run, in what order, and what can run
-*at the same time* - you describe the shape, not the schedule.
+at the same time.
 
-This chapter covers the model generically: how a workflow is structured, how a
-single workflow spans **many MCP servers**, the **two kinds of parallelism** you
-get for free, and the shapes of automation worth building. The two companion
-chapters go deeper on the moving parts:
+We discuss about how a workflow is structured, how multiple workflows can span many MCP servers, and parallelism among nodes execution. We will discuss later about:
 
 - [Data Flow & Live References](./data-flow-references.mdx) - how a node reads
   an upstream node's result with `$ref`.
@@ -51,19 +48,11 @@ and a list of `nodes`. Every node is one tool call:
 }
 ```
 
-You rarely hand-write `dependsOn`: when a node reads another node's result with
-`$ref`, that edge is **inferred** and folded into the dependency graph
-automatically (see [Data Flow & Live References](./data-flow-references.mdx)).
-The graph you get is exactly the data flow you wrote.
+Dependencies are usually inferred rather than declared. When a node references another node's output with `$ref`, that relationship is automatically added to the execution graph.
 
 ## Multi-layered, multi-nodal
 
-Workflows are not limited to a straight line. A real automation is typically
-**wide and deep**: many nodes (multi-nodal) arranged in many layers
-(multi-layered). A "layer" is just the set of nodes whose dependencies are all
-satisfied at the same moment - the engine discovers layers from the edges; you
-never declare them. Roots (nodes with no incoming edges) form the first layer;
-each completion can unlock the next.
+Workflows are represented as directed dependency graphs rather than linear sequences. Nodes can execute in parallel whenever their dependencies have been satisfied. The executor derives execution stages from the graph topology: nodes with no incoming dependencies form the initial stage, and each completed node may make additional downstream nodes eligible for execution. These stages are computed automatically from the dependency graph; they are not declared explicitly.
 
 ## One workflow, many MCP servers
 
@@ -83,9 +72,9 @@ That means a workflow can freely mix:
 all in the same run, with data flowing across server boundaries via `$ref`.
 Different tools, different MCP configs, one graph.
 
-## Parallelism, two ways
+## Parallel Execution
 
-The engine extracts parallelism from the graph - and it does so at two levels.
+The engine extracts parallelism from the graph and it does so at two levels.
 
 ### 1. Parallel branches inside one workflow
 
@@ -115,7 +104,7 @@ fan-in natural - independent branches simply proceed in parallel.
 
 A single connection can run **multiple whole workflows concurrently.** Each
 `runWorkflow` carries its own `runId`, and the `Session` keys every active run
-in a map - so independent runs (each with its own executor, abort controller,
+in a map so independent runs (each with its own executor, abort controller,
 and breakpoint state) execute side by side and stream events independently.
 
 ```startLine:141:160:MCP-Playground/backend/src/server/session.ts
@@ -143,10 +132,9 @@ and breakpoint state) execute side by side and stream events independently.
 
 ## A generic multi-layer DAG
 
-Putting it together: roots run in parallel, branches fan out across servers,
-results fan back in, and a final layer persists and publishes. The labels show
-which MCP server each node calls - **A**, **B**, and **C** are three different
-servers in one workflow.
+The workflow below illustrates how execution is derived entirely from dependency edges. Nodes with no incoming dependencies (`a1`, `b1`) can start immediately and run in parallel. As nodes complete, their dependents become eligible for execution. Nodes with multiple upstream dependencies, such as `c1`, do not start until all required inputs are available. Once `c2` completes, both downstream nodes (`a3`, `b3`) become runnable and may execute concurrently.
+
+The labels indicate the MCP server invoked by each node. In this example, servers **A**, **B**, and **C** participate in the same workflow, while execution remains coordinated by a single dependency graph.
 
 ```mermaid
 flowchart TD
@@ -154,11 +142,11 @@ flowchart TD
     a1["list · server A"]
     b1["list · server B"]
   end
-  subgraph L1 ["Layer 1 - fetch / fan-out"]
+  subgraph L1 ["Layer 1"]
     a2["fetch · server A"]
     b2["fetch · server B"]
   end
-  subgraph L2 ["Layer 2 - transform (fan-in)"]
+  subgraph L2 ["Layer 2"]
     c1["combine · server C"]
   end
   subgraph L3 ["Layer 3 - render"]
@@ -177,28 +165,6 @@ flowchart TD
   c2 --> b3
 ```
 
-Here `a1` and `b1` start together; `c1` waits for both upstream branches (fan-in);
-`a3` and `b3` run together once the render completes (fan-out). No layer numbers
-are written anywhere - the engine derives all of it from the edges.
+No execution stages or layer numbers are defined in the workflow itself. The executor derives them dynamically from the dependency graph, scheduling any node whose dependencies have been satisfied.
 
-## Use cases: shapes worth building
-
-The model is general, but a handful of shapes recur:
-
-- **Fan-out / fan-in aggregation** - query several sources in parallel, then
-  combine their results in one downstream node.
-- **Read - transform - write enrichment** - pull data from one tool, reshape it
-  with another, and persist the result.
-- **Cross-system orchestration** - read from system A and act on system B in the
-  same run, with `$ref` carrying the hand-off.
-- **Gather - render - persist artifact generation** - collect data, render it
-  (a chart, a document), and save or publish the artifact.
-- **Guarded runs** - put a `breakpoint` on a sensitive node so a human can
-  inspect resolved arguments and choose to continue, edit, skip, or fail.
-- **Resume-after-failure** - re-run only the failed and remaining nodes by
-  seeding the already-completed results, instead of repeating the whole graph.
-- **Headless CI automation** - run the exact same workflow from the
-  [CLI](./cli.md) in a pipeline, gating on its exit code.
-
-With the model in hand, the next two chapters explain the two mechanisms that
-make these workflows expressive and safe: **data flow** and **breakpoints**.
+With the model in hand, we now explain the two mechanisms that make these workflows expressive and safe: **data flow** and **breakpoints**.

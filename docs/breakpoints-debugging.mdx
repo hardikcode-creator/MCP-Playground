@@ -6,37 +6,14 @@ sidebar_position: 3
 description: Authored and runtime breakpoints unified into one source of truth, the four pause actions (continue, continue-with-args, skip, fail), and the live WebSocket debugger that pauses one branch while others keep running.
 ---
 
+import useBaseUrl from '@docusaurus/useBaseUrl';
+
 # Breakpoints & Debugging
 
 A workflow engine that you cannot pause is a black box. MCP Playground treats a
-run like a debugger session: you can pause a node **before its tool is called**,
+run like a debugger session: you can pause a node before its tool is called or on the fly when workflow is running,
 inspect the exact resolved arguments, edit them, and then continue, skip, or
-fail - all while the rest of the graph keeps running.
-
-## Two sources, one source of truth
-
-Breakpoints come from two places:
-
-- **Authored** - `"breakpoint": true` on a node in the workflow JSON.
-- **Runtime** - the UI (or CLI) arms one with `setBreakpoint(nodeId)` while the
-  workflow is already running.
-
-The elegant part: at run start, authored breakpoints are **seeded into the same
-mutable runtime set**, which then becomes the single source of truth for "is
-this node armed." That means a breakpoint can be toggled *off* on the fly -
-including an authored one - and re-armed, all through one set.
-
-```startLine:162:166:MCP-Playground/backend/src/workflow/executor.ts
-  setBreakpoint(nodeId: string): void {
-    if (this.runtimeBreakpoints.has(nodeId)) return;
-    this.runtimeBreakpoints.add(nodeId);
-    this.emit({ type: 'breakpoint.added', nodeId });
-  }
-```
-
-The check happens **just before** the tool call, and is re-read at that moment -
-so a breakpoint added after a node went ready but before it ran still takes
-effect.
+fail.
 
 ## The four pause actions
 
@@ -59,39 +36,14 @@ flowchart TD
   Q -->|"fail"| U["mark failed (with message)<br/>-> dependents skipped"]
 ```
 
-The most powerful action is **`continue-with-args`**: the user's edit is treated
-as the new authored form, stored, and run through the **same `$ref` resolution
-pipeline** - so you can even introduce a *new* reference to another completed
-node's output at the breakpoint, and it resolves correctly.
-
-```startLine:417:433:MCP-Playground/backend/src/workflow/executor.ts
-      if (outcome.kind === 'args') {
-        // User overrode the args at the breakpoint. Treat their input as the
-        // new "authored" form: store it in typedArgs and run it through the
-        // same resolve pipeline, in case they introduced new $refs pointing
-        // at other completed nodes. If the new args fail to resolve, the
-        // node is finalized as failed inside tryResolveArgs.
-        state.typedArgs = outcome.args;
-        const reresolved = this.tryResolveArgs(
-          outcome.args,
-          state,
-          results,
-          startedAt,
-        );
-        if (reresolved === null) return { nodeId: node.id };
-        resolvedArgs = reresolved;
-        state.resolvedArgs = resolvedArgs;
-      }
-```
-
-## Pausing one branch, not the whole run
+## Node-Scoped Breakpoints
 
 Because the scheduler awaits in-flight nodes with `Promise.race`, a breakpoint
-pauses **only that node's** execution. Its promise stays pending while the other
+pauses only that node's execution. Its promise stays pending while the other
 branches' promises resolve; the main loop processes those completions and keeps
 the DAG advancing everywhere that is not downstream of the paused node.
 
-This also means **multiple nodes can be paused at the same time** on parallel
+This also means multiple nodes can be paused at the same time on parallel
 branches. The WebSocket pause handler simply parks one resolver per node id and
 resolves the right one when its `pauseAction` arrives:
 
@@ -115,27 +67,29 @@ resolves the right one when its `pauseAction` arrives:
   }
 ```
 
-## Cancellation never deadlocks on a pause
+## Cancellation Interrupts Paused Nodes
 
-A paused node is awaiting a human. What if the run is cancelled while it waits?
-The pause is **raced against the abort signal**, so cancellation always wins: on
-abort, every parked pause is resolved with `continue`, and the executor's
-internal signal race marks the node as "caught mid-flight" rather than resuming
-it. A breakpoint can never wedge a cancellation.
+A workflow can be cancelled even if one or more nodes are currently paused at breakpoints. Paused nodes do not block cancellation.
+
+When a cancellation request is received, the executor aborts all in-flight work and releases any nodes waiting at breakpoints. The abort signal takes precedence over pending pause states, allowing the workflow to terminate immediately without requiring user interaction.
+
+As a result, breakpoints cannot prevent or delay cancellation. A workflow remains cancellable regardless of how many nodes are paused or where those pauses occur in the dependency graph.
 
 ## The live debugger loop
+
+<div className="img-gallery">
+  <figure>
+    <img src={useBaseUrl('/img/screenshots/breakpoint-paused.png')} alt="MCP Playground canvas paused at a breakpoint: the get_cluster_by_id node is halted while the Tool Inspector shows its $ref argument (extId resolved from nutanix__list_clusters-1 via $.structuredContent[1].extId), the Live Resolved Args, and Resume / Skip buttons" />
+    <figcaption>A run paused at a breakpoint on <code>get_cluster_by_id</code>: the inspector shows the node's <code>$ref</code> argument and the <strong>Live Resolved Args</strong> the tool is about to receive (<code>extId</code> resolved from the upstream <code>list_clusters</code> result), with Resume / Skip controls. Only one branch is parked (<code>paused (1)</code>) - the rest of the DAG keeps running.</figcaption>
+  </figure>
+</div>
 
 Putting it together, the debug loop the user experiences is:
 
 1. Arm a breakpoint (authored, or click a node mid-run).
-2. The engine emits `node.paused` with the fully **resolved** arguments.
+2. The engine emits `node.paused` with the fully resolved arguments.
 3. The UI shows the tool, the resolved args, and the source (`authored` /
    `runtime`).
 4. The user inspects, optionally edits the args, then continues / skips / fails.
-5. The engine emits `node.resumed` and the run proceeds - other branches never
+5. The engine emits `node.resumed` and the run proceeds while other branches are never
    stopped.
-
-:::note Figure to capture
-A screenshot of a node **paused** on the canvas with its resolved arguments in
-the inspector (plus the live event log) belongs here; it needs a running UI.
-:::
