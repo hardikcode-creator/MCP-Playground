@@ -3,71 +3,47 @@ id: impact
 title: Impact & Business Value
 sidebar_label: 10. Impact & Business Value
 sidebar_position: 11
-description: Why MCP Playground matters - the generic business value of a visual, debuggable multi-MCP workflow tool, and the Nutanix-specific value of turning Prism and Morpheus into composable, AI-callable tools.
+description: Why MCP Playground matters - the business value of a visual, debuggable multi-MCP workflow tool across developer productivity, observability, client-free workflows, and deterministic automation.
 ---
-
 # Impact & Business Value
-
-The value of MCP Playground falls into two buckets: the **generic** value it
-brings to anyone building multi-tool automations, and the **Nutanix-specific**
-value of what we built it on top of.
-
-:::note On numbers
-The statements below are framed as **implications of capabilities that exist in
-the source today** - not as measured benchmarks. Any hard metric (time saved,
-adoption, etc.) should be supplied and validated by the team before it is quoted
-to judges.
-:::
-
-## Generic business impact
-
-- **Faster, safer prototyping of agentic workflows.** Multi-MCP orchestration
-  moves from hand-written glue code to a **visual, debuggable canvas**. Authors
-  wire data with `$ref` (with suggestions), instead of guessing field paths and
-  re-running scripts.
-- **Automation you can trust.** Breakpoints, step-through, a live event stream,
-  and resume-from-failure turn opaque automation into something a reviewer can
-  **inspect, pause, and audit** - the difference between a demo script and a
-  dependable runbook.
-- **Composability across the whole MCP ecosystem.** Because it speaks the
-  standard `mcpServers` config, any MCP server - a local `npx` package, a
-  hosted/remote server, or a custom one - drops into the same workflow. Teams
-  reuse the ecosystem instead of rebuilding it.
-- **CI-ready by construction.** The same engine runs headless via the CLI, so a
-  workflow proven in the UI can run unattended in a pipeline.
-- **Private, low-cost intelligence.** The AI argument-mapper runs on a **local
-  Ollama** model with no cloud key, keeping the smart-assist path cheap and
-  data-private.
-- **A shared artifact for collaboration.** A workflow graph is a single, visual
-  source of truth that a teammate, a reviewer, or a judge can read and re-run.
-
-## Nutanix-specific impact
-
-- **Prism telemetry becomes AI-ready tools.** The custom Prism MCP turns
-  collected Nutanix Prism data into 19 callable MCP tools (clusters, hosts, VMs,
-  performance, capacity, charts). Any MCP-speaking agent can now reason over
-  Prism data directly.
-- **A repeatable path to MCP-enable the Nutanix API surface.** The Prism MCP was
-  **generated** from an OpenAPI spec by the Morpheus MCP generator, not
-  hand-written. That validates a **generator-driven pattern**: point it at an
-  OpenAPI-described Nutanix service and get a working MCP server - a path that
-  scales well beyond the endpoints in this demo.
-- **It already drives real Nutanix internal APIs.** Beyond the collected-data
-  MCP, the backend integrates the official Nutanix clients
-  `@nutanix-api/clustermgmt-js-client` and `@nutanix-api/vmm-js-client`
-  (see `backend/package.json`), powering the `nutanix_api_workflow_with_mcp`
-  example that walks clusters, CVMs, VMs, and disks.
-- **Operational runbooks over Nutanix data.** The same building blocks - collect,
-  transform, chart, persist, summarize, and relate - compose into capacity and
-  performance dashboards, audit trails, knowledge graphs, and reproducible
-  diagnostic bundles for support and operations.
-- **An internal enablement sandbox.** Nutanix engineers, SEs, and support staff
-  get a safe place to **prototype agentic workflows over Prism and Morpheus**
-  before committing to a productized integration - lowering the cost of
-  experimenting with MCP across the portfolio.
-
+MCP Playground turns multi-tool MCP automation from hand-written glue code into a
+**visual, debuggable workflow canvas**. The business value shows up in four
+areas: developer productivity, observability, client-free workflows, and
+deterministic automation.
+## Developer productivity
+- **Debug MCP servers instead of guessing at them.** Breakpoints, step-through,
+  and a live event stream (the MCP debugger) let a developer pause a workflow
+  mid-run, inspect the exact arguments sent and the raw response returned, then
+  resume - turning blind trial-and-error script runs into interactive inspection.
+- **Reuse MCP servers across teams - no KT, no rebuild.** Because any server
+  drops in through the standard `mcpServers` config, one team's MCP server is
+  immediately usable by another without a knowledge-transfer session or the rework
+  of building a near-identical server. That raises cross-team collaboration and
+  cuts duplicated effort.
+- **Validate a server before committing to a client.** Developers can connect to
+  an MCP server and exercise its tools on the canvas to confirm it actually covers
+  their use case *before* investing in a full client integration - failing fast
+  while it's still cheap to change course.
+## Observability
+- **See the whole automation, live.** Expressing an automation as a visual
+  workflow makes an otherwise-opaque chain of tool calls observable: every node's
+  status, inputs, and outputs are visible as the graph runs, not buried in logs.
+- **Real-time argument mapping and data flow.** A live resolved-args preview and
+  AI-assisted argument mapping show exactly how one tool's response feeds the
+  next tool's arguments, in real time, as you wire and run - so the data path is
+  inspectable rather than implicit. (The AI assist runs on a **local model**, so
+  this stays cheap and data-private.)
+## Workflows straight from MCP servers - no client required
+- **Skip the bespoke client for small or specific jobs.** For minimal workflows
+  or one-off use cases, you compose MCP tools directly on the canvas instead of
+  writing and maintaining a custom client application - getting from "these tools
+  exist" to "this job is automated" without the integration overhead.
+## Deterministic automation across MCP servers
+- **Orchestrate many servers, repeatably.** A workflow is a deterministic DAG:
+  the same graph and inputs produce the same ordered sequence of tool calls across
+  multiple MCP servers, making multi-server automation reproducible and auditable
+  rather than a one-off script. The same engine also runs headless via the CLI,
+  so a workflow proven in the UI can run unattended in a pipeline.
 ## In one sentence
-
 MCP Playground makes multi-tool AI automation **visual, debuggable, and
-repeatable** for everyone - and for Nutanix specifically, it turns Prism and the
-Morpheus generator into a composable, AI-callable foundation.
+repeatable** for everyone.
