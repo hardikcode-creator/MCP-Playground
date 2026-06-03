@@ -16,37 +16,16 @@ Protocol](https://modelcontextprotocol.io) servers as a node graph**, passing
 data between tool calls with `$ref`, setting breakpoints, and watching every
 step execute live over a WebSocket.
 
-It ships with a **custom Prism MCP** (a FastAPI service plus a generated MCP
-server over real, collected Nutanix data) and a set of end-to-end examples you
-can run, step through, and adapt - the most elaborate of which orchestrates
-several MCP servers in a single run (walked through in the
-[live example](./live-example-dashboard.mdx)).
+You can create, save, and run multiple workflows in the playground to compare and reuse automation patterns.
 
-<div className="stat-row">
-  <div className="stat-card">
-    <div className="stat-num">1</div>
-    <div className="stat-label">shared engine behind the UI and the CLI</div>
-  </div>
-  <div className="stat-card">
-    <div className="stat-num">2</div>
-    <div className="stat-label">JSON files define a run (config + workflow)</div>
-  </div>
-  <div className="stat-card">
-    <div className="stat-num">3</div>
-    <div className="stat-label">kinds of MCP server: local, hosted, custom</div>
-  </div>
-  <div className="stat-card">
-    <div className="stat-num">0</div>
-    <div className="stat-label">databases or telemetry - runs stay local</div>
-  </div>
-</div>
+![MCP Playground Home Page](/img/screenshots/HomePage.png)
 
 ## The problem
 
-The Model Context Protocol standardized *how* an AI client talks to a single
-tool server. But real automation rarely uses one server - it stitches several
-together: read data from one tool, transform it, render a chart with another,
-persist with a third, publish with a fourth.
+AI tool integration is standardized at the single-tool level, but real
+automation is inherently multi-system. Teams still have to stitch together
+data retrieval, transformation, content generation, persistence, and publishing
+across disconnected services, which adds complexity and failure points.
 
 Today that orchestration is **hand-written glue code**:
 
@@ -56,8 +35,6 @@ Today that orchestration is **hand-written glue code**:
   you re-run the whole script and add `print` statements.
 - Mixing a local `npx` server, a hosted server, and your own custom server
   means juggling transports, environment variables, and lifecycles by hand.
-- There is no shared, visual artifact a teammate (or a hackathon judge) can look
-  at to understand what the automation actually *does*.
 
 ## What MCP Playground gives you
 
@@ -66,61 +43,53 @@ calls, and the runtime is a real debugger:
 
 ```mermaid
 flowchart LR
-  author["Author<br/>(drag tools, wire $refs)"] --> canvas["Visual DAG<br/>(React Flow)"]
-  canvas --> engine["Workflow engine<br/>(DAG scheduler + $ref resolver)"]
-  engine --> servers["Any mix of MCP servers<br/>local npx · hosted · custom Python"]
-  engine -. "live events :8787" .-> canvas
+  author(["User<br/>drag tools + wire $refs"])
+  canvas["Visual DAG Canvas<br/>(React Flow)"]
+  engine["Workflow Engine<br/>(DAG scheduler + $ref resolver)"]
+  servers["MCP Servers<br/>local npx · hosted · custom Python"]
+
+  author -->|build workflow| canvas
+  canvas -->|execute graph| engine
+  engine -->|tool calls| servers
+  engine -.->|live node events via websocket port 8787| canvas
+
+  subgraph runtime["Runtime Loop"]
+    direction LR
+    canvas
+    engine
+    servers
+  end
+
+  classDef user fill:#e8f0ff,stroke:#4f46e5,stroke-width:1.5px,color:#111827;
+  classDef core fill:#ecfeff,stroke:#0891b2,stroke-width:1.5px,color:#083344;
+  classDef infra fill:#ecfdf5,stroke:#16a34a,stroke-width:1.5px,color:#14532d;
+  classDef group fill:none,color:#e5e7eb;
+
+  class author user;
+  class canvas,engine core;
+  class servers infra;
+  class runtime group;
 ```
 
 ## Key features
 
-- **Visual DAG editor** for MCP tool calls, built on React Flow.
-- **`$ref` data flow** - pipe any field of one node's result into another's
-  arguments via JSONPath, with a clickable "pick from the response" helper.
-- **Breakpoints and step-through** - pause a run at chosen nodes and inspect
-  resolved arguments and results before continuing.
-- **Multi-MCP orchestration** - mix local `npx` servers, a remote/hosted server,
-  and a custom Python MCP in a single workflow.
-- **Live WebSocket debugger** - per-node `started / paused / completed / failed`
-  events stream to the UI as they happen.
-- **Headless CLI** - run any workflow without the UI (`list-tools`,
-  `call-tool`, `run-workflow` with `--break-at`), so workflows are CI-runnable.
-- **Portable Python MCP via [`uv`](https://docs.astral.sh/uv/)** - no manual
-  virtualenvs; `uv` provisions dependencies on first launch.
+- **Multi-MCP orchestration** - run local `npx`, hosted, and custom Python MCP servers in one workflow.
+- **Visual DAG editor** - design MCP tool-call graphs interactively with React Flow.
+- **`$ref` data flow** - map output fields to downstream args with JSONPath and response picking.
+- **Smart argument auto-mapping** - suggest likely `$ref` links between tool outputs and next-step inputs.
+- **Breakpoints and step-through** - pause the workflow at nodes to inspect resolved args and outputs.
+- **Live WebSocket debugger** - stream per-node `started / paused / completed / failed` events in real time.
+- **Headless CLI** - run workflows without UI (`list-tools`, `call-tool`, `run-workflow --break-at`) for CI.
 
-## Who it's for
 
-- **Builders of agentic / multi-tool automations** who want a faster, safer loop
-  than hand-wiring MCP calls in a script.
-- **Platform and infra engineers** turning an existing API (for example,
-  Nutanix Prism) into composable, AI-callable tools.
-- **Teams and reviewers** who want a single visual artifact that explains - and
-  can re-run - what an automation does.
+## Use cases
 
-## How to read this document
-
-This is a single, top-to-bottom technical document. The chapters build on each
-other:
-
-1. **Overview & Use Cases** (you are here)
-2. **Architecture** - the moving parts and the end-to-end request flow
-3. **The Executor Engine** - the heart of the system (DAG scheduling, data flow,
-   cancellation, resume)
-4. **Workflows** - building multi-layer DAGs across MCPs, plus the two mechanisms
-   that power them:
-   - **Building Workflows** - the model, parallelism, and use cases
-   - **Data Flow & Live References** - the `$ref` model and the suggestion engine
-   - **Breakpoints & Debugging** - pause, inspect, edit, resume
-5. **The CLI** - the headless, local-by-default runner
-6. **The Custom Prism MCP** - turning Nutanix data into MCP tools via Morpheus
-7. **Live Example** - an end-to-end, multi-server workflow
-8. **AI Services** - smart argument mapping (in progress)
-9. **Design Discussions** - the system design and why
-10. **Impact & Business Value** - generic and Nutanix-specific
-11. **Testimonials**
-
-:::note Source-grounded
-Every technical claim in this document is grounded in the project source. Where
-a feature is still in progress, or where a figure needs a human to confirm, it
-is called out explicitly rather than assumed.
-:::
+- **Morpheus-to-Playground Workflow Factory:** Morpheus (a SaaS platform) can generate MCP servers from REST Swagger/OpenAPI links, and those generated servers can be plugged into MCP Playground for orchestration and end-to-end workflow building.
+- **Multi-Server Orchestration:** Aggregate multiple independent MCP servers onto a single canvas to build cohesive, 
+cross-platform workflows. This allows tools from entirely different environments to pass data to each other seamlessly.
+- **Zero-Client Visual Testing:** Provides an interactive drag-and-drop scratchpad to test tools visually right out of the box. 
+This eliminates the need to build custom client code or run tedious terminal commands just to verify endpoints.
+- **Sandboxed Step-Debugging:** Use a step-debugger with live breakpoints to safely dry-run automation sequences before deploying them. 
+Developers can halt execution mid-flight and tweak argument payloads to safely test edge cases.
+- **Black-Box to Glass-Box Visibility:** Translate invisible backend text traffic into an illuminated, color-coded node graph layout. 
+This gives developers total visibility into data interactions and dependencies, making bug-tracking effortless.
