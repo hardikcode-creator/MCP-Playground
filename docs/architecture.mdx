@@ -1,0 +1,118 @@
+---
+id: architecture
+title: Architecture
+sidebar_label: 2. Architecture
+sidebar_position: 2
+description: The moving parts of MCP Playground and the end-to-end flow from a click in the UI to a tool call on a spawned MCP server.
+---
+
+# Architecture
+
+MCP Playground is three cooperating pieces: a **frontend** canvas, a **backend**
+that is both an MCP proxy and a workflow engine, and the **MCP servers**
+themselves.
+
+```mermaid
+flowchart LR
+  user["User"] --> fe
+  subgraph feL ["Frontend (browser)"]
+    fe["React Flow canvas"]
+  end
+  subgraph beL ["Backend (Node · ws://:8787)"]
+    engine["Workflow engine"]
+    proxy["MCP proxy"]
+    engine -->|"ToolCaller"| proxy
+  end
+  subgraph srvL ["MCP servers (spawned per session)"]
+    local["local npx servers"]
+    hosted["hosted / remote server"]
+    custom["Morpheus Generated MCP<br/>(e.g. Collector MCP)"]
+  end
+  fe <-->|"JSON over WebSocket"| engine
+  proxy --> local
+  proxy --> hosted
+  proxy --> custom
+```
+
+## End-to-end: from a click to a tool call
+
+Here is what happens across a full connect-and-run, including a breakpoint
+round-trip:
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant UI as Frontend (React Flow)
+  participant S as Session
+  participant CM as ClientManager
+  participant EX as WorkflowExecutor
+  participant MCP as MCP server (stdio)
+
+  UI->>S: connect(config, providedEnv)
+  S->>CM: start(config) - spawn + connect all servers
+  CM->>MCP: stdio connect + listTools
+  MCP-->>CM: tools
+  CM-->>S: catalog (server__tool)
+  S-->>UI: connected(catalog, skipped, failed)
+
+  UI->>S: runWorkflow(runId, workflow)
+  S->>EX: new executor(toolCaller=CM.callTool, WsPauseHandler)
+  S->>EX: run(workflow, signal)
+  EX-->>S: engineEvent(node.started ...)
+  S-->>UI: engineEvent (streamed live)
+  EX->>CM: callTool(server__tool, resolvedArgs)
+  CM->>MCP: tools/call
+  MCP-->>CM: result
+  CM-->>EX: enriched result
+
+  Note over EX,UI: If a node has a breakpoint
+  EX-->>UI: engineEvent(node.paused, args)
+  UI->>S: pauseAction(runId, nodeId, continue|skip|...)
+  S->>EX: WsPauseHandler.resolve(nodeId, action)
+  EX-->>UI: engineEvent(node.resumed)
+
+  EX-->>S: WorkflowRunResult
+  S-->>UI: workflowResult(runId, result)
+```
+
+The debugger side-channel (`pauseAction`, `cancel`, `setBreakpoint`,
+`clearBreakpoint`) is processed **concurrently with a running run** - the same
+`Session` handles a paused node's resume while other branches keep executing.
+
+## What flows on the canvas: two documents
+
+A run is defined by two JSON documents, both validated with `zod`:
+
+1. **`mcp-config.json`** - which MCP servers to spawn. The **standard
+   `mcpServers` map** is preferred (it matches Claude Desktop / Cursor /
+   `mcp-remote`), and a legacy `servers` array is also accepted. Each entry is a
+   spawn spec: `command`, `args`, optional `env`, optional `cwd`.
+
+   ```json
+   {
+     "mcpServers": {
+       "filesystem": {
+         "command": "npx",
+         "args": ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]
+       }
+     }
+   }
+   ```
+
+2. **`workflow.json`** - the DAG. A workflow has an `id`, `version: 1`, an
+   optional `name`, and `nodes[]`. Each node has an `id`, a `tool` (the
+   namespaced `server__tool` name), `args`, an optional `dependsOn`, and an
+   optional `breakpoint`.
+
+   ```json
+   {
+     "id": "hello",
+     "version": 1,
+     "nodes": [
+       { "id": "greet", "tool": "everything__echo", "args": { "message": "hi" } }
+     ]
+   }
+   ```
+
+The next chapter dives into the engine that turns that `workflow.json` into a
+live, debuggable run.

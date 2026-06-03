@@ -15,7 +15,7 @@ function buildClusterApiClient(): ClustersApi {
   client.host = process.env.NUTANIX_HOST ?? '10.47.104.90';
   client.port = process.env.NUTANIX_PORT ?? '9440';
   client.username = process.env.NUTANIX_USERNAME ?? 'admin';
-  client.password = process.env.NUTANIX_PASSWORD ?? 'Nutanix123$';
+  client.password = process.env.NUTANIX_PASSWORD ?? 'REPLACE_WITH_YOUR_PASSWORD';
   client.maxRetryAttempts = 3;
   client.retryInterval = 3000;
   return new ClustersApi(client);
@@ -26,7 +26,7 @@ function buildVmApiClient(): VmApi {
   client.host = process.env.NUTANIX_HOST ?? '10.47.104.90';
   client.port = process.env.NUTANIX_PORT ?? '9440';
   client.username = process.env.NUTANIX_USERNAME ?? 'admin';
-  client.password = process.env.NUTANIX_PASSWORD ?? 'Nutanix123$';
+  client.password = process.env.NUTANIX_PASSWORD ?? 'REPLACE_WITH_YOUR_PASSWORD';
   client.maxRetryAttempts = 3;
   client.retryInterval = 3000;
   return new VmApi(client);
@@ -37,7 +37,7 @@ function buildCvmsApiClient(): CvmsApi {
   client.host = process.env.NUTANIX_HOST ?? '10.47.104.90';
   client.port = process.env.NUTANIX_PORT ?? '9440';
   client.username = process.env.NUTANIX_USERNAME ?? 'admin';
-  client.password = process.env.NUTANIX_PASSWORD ?? 'Nutanix123$';
+  client.password = process.env.NUTANIX_PASSWORD ?? 'REPLACE_WITH_YOUR_PASSWORD';
   client.maxRetryAttempts = 3;
   client.retryInterval = 3000;
   return new CvmsApi(client);

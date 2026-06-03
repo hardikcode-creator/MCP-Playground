@@ -1,0 +1,28 @@
+{
+  "mcpServers": {
+    "collector": {
+      "command": "uv",
+      "args": ["run", "--directory", "__REPO_ROOT__/prism-mcp/mcp-server", "python", "server.py"]
+    },
+    "chart": {
+      "command": "npx",
+      "args": ["-y", "@antv/mcp-server-chart"]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "__REPO_ROOT__/examples/collector_dashboard_with_mcp"
+      ]
+    },
+    "everything": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-everything"]
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"]
+    }
+  }
+}

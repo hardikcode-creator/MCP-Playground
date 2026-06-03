@@ -38,7 +38,16 @@ const CLIENT_INFO = {
   version: '0.0.1',
 };
 
-const CONNECT_TIMEOUT_MS = 300_000;
+// npx/uvx cold-starts (chart/filesystem/everything/memory) can take a while on
+// the very first run while the package is fetched, so give connections headroom.
+const CONNECT_TIMEOUT_MS = 90_000;
+
+// Per tool-call request budget. The MCP SDK defaults to a 60s per-request timeout
+// with no overall cap; long chart renders or multi-step tools can exceed that, so
+// raise the per-request timeout, add an overall ceiling, and let server progress
+// notifications reset the per-request timer instead of failing mid-flight.
+const TOOL_CALL_TIMEOUT_MS = 180_000;
+const TOOL_CALL_MAX_TOTAL_MS = 600_000;
 
 /**
  * ClientManager handles connection parsing and listing of tools from MCP servers.
@@ -95,20 +104,42 @@ export class ClientManager {
   ): Promise<void> {
     const env = mergeEnv(server.env, providedForServer);
 
+    // `stderr: 'pipe'` lets us tee the child's stderr to both our own stderr
+    // (so backend logs still show server boot output as before) AND a ring
+    // buffer we can attach to error messages. Without this, the connect()
+    // promise just rejects with the SDK's generic "Connection closed" /
+    // -32000 and the actual cause (e.g. `uvx` saying "Distribution not
+    // found", a missing `--from`, a network/proxy error during the first
+    // package install) is invisible to the UI — which is the #1 reason
+    // uv/uvx servers appear to "fail to load".
     const transport = new StdioClientTransport({
       command: server.command,
       args: server.args,
       env,
       cwd: server.cwd,
+      stderr: 'pipe',
     });
+
+    const stderrTail = new StderrTail(server.name);
+    if (transport.stderr) {
+      transport.stderr.on('data', (chunk: Buffer | string) => {
+        const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+        stderrTail.append(text);
+        process.stderr.write(text);
+      });
+    }
 
     const client = new Client(CLIENT_INFO, { capabilities: {} });
 
-    await withTimeout(
-      client.connect(transport),
-      CONNECT_TIMEOUT_MS,
-      `Connection to MCP server "${server.name}" timed out after ${CONNECT_TIMEOUT_MS}ms`,
-    );
+    try {
+      await withTimeout(
+        client.connect(transport),
+        CONNECT_TIMEOUT_MS,
+        `Connection to MCP server "${server.name}" timed out after ${CONNECT_TIMEOUT_MS}ms`,
+      );
+    } catch (err) {
+      throw new Error(stderrTail.annotate((err as Error).message));
+    }
 
     const tools = await this.fetchTools(server.name, client);
 
@@ -225,7 +256,12 @@ export class ClientManager {
     const result = await managed.client.callTool(
       { name: owner.baseName, arguments: args },
       undefined,
-      options.signal ? { signal: options.signal } : undefined,
+      {
+        ...(options.signal ? { signal: options.signal } : {}),
+        timeout: TOOL_CALL_TIMEOUT_MS,
+        maxTotalTimeout: TOOL_CALL_MAX_TOTAL_MS,
+        resetTimeoutOnProgress: true,
+      },
     );
     if (result.isError === true) {
       const message = extractErrorMessage(result);
@@ -352,6 +388,38 @@ function mergeEnv(
   }
   if (providedForServer) Object.assign(merged, providedForServer);
   return merged;
+}
+
+/**
+ * Captures the tail of a spawned MCP server's stderr so we can attach it to
+ * connection failures. MCP's transport rejects with a terse "Connection
+ * closed" / -32000 when the child exits before initialize completes, which
+ * tells the user nothing — meanwhile the *real* error (e.g. `uvx` saying
+ * "No solution found when resolving tool dependencies", "command not found
+ * inside the venv", a Python/network/proxy failure) was just printed on
+ * stderr seconds earlier. Buffering a ring of recent bytes and folding it
+ * into the rejection turns these into self-diagnosing errors in the UI.
+ */
+class StderrTail {
+  private static readonly MAX_BYTES = 4_000;
+  private buffer = '';
+
+  constructor(private readonly serverName: string) {}
+
+  append(text: string): void {
+    this.buffer += text;
+    if (this.buffer.length > StderrTail.MAX_BYTES) {
+      this.buffer = this.buffer.slice(-StderrTail.MAX_BYTES);
+    }
+  }
+
+  annotate(message: string): string {
+    const tail = this.buffer.trim();
+    if (tail.length === 0) {
+      return `MCP server "${this.serverName}" failed: ${message} (child wrote nothing to stderr — likely a spawn/PATH issue or the binary exited silently)`;
+    }
+    return `MCP server "${this.serverName}" failed: ${message}\n--- last stderr from "${this.serverName}" ---\n${tail}\n--- end stderr ---`;
+  }
 }
 
 function withTimeout<T>(

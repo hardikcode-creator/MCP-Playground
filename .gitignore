@@ -5,3 +5,22 @@ dist/
 *.log
 .env
 .env.local
+
+# Python (prism-mcp REST API + MCP server, run via uv)
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+build/
+
+# Collected databases. The single sample DB is force-added on purpose
+# (prism-mcp/rest-api/PC 2024.3 legacy.db) so the demos work out of the box.
+*.db
+
+# Per-run example artifacts (chart URL files, knowledge graph, etc.)
+examples/**/output/
+
+# Local editor workspace file
+*.code-workspace
