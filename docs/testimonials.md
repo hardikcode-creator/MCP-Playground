@@ -8,41 +8,26 @@ description: Voices from the team that built MCP Playground - leads and members.
 
 # Testimonials
 
-:::caution Placeholders - to be filled by the team
-The quotes below are **placeholders**. They were intentionally not written for
-anyone: please replace each one with the person's own words (and confirm their
-exact title / lead-vs-member role). The contributor names are taken from the
-project's Git history.
-:::
+### SAAS Engineering - Collector team
 
-## Team leads
+> *"In SaaS Engineering, the Collector team generates data that must move to the Sizer team for recommendations.*
+> *MCP Playground automates this cross-team handoff by orchestrating multiple MCP servers in one workflow.*
+> *Instead of manual exports and retries, teams get a repeatable pipeline with live debugging and breakpoint validation.*
+> *Result: faster recommendations, fewer integration errors, and a more reliable end-to-end process."*
 
-> _"[PLACEHOLDER - a sentence or two on the problem MCP Playground solves and why
-> it matters to the team / org.]"_
->
-> **Pratyush Bindal** — _[role / title]_
+### NCM Self-Service team
 
-> _"[PLACEHOLDER - a sentence on the technical bar the team set, e.g. the
-> transport-agnostic engine or the live debugger.]"_
->
-> **Hardik Agrawal** — _[role / title]_
+> *"NCM Self-Service often requires multi-layered, multimodal workflows where multiple microservices must work together in sequence.*
+> *MCP Playground provides a map-like workflow canvas to orchestrate these services as one end-to-end pipeline.*
+> *Instead of disconnected calls, teams get coordinated service-to-service communication with clear data flow, debugging, and validation at each step."*
 
-## Team members
+### SAAS Engineering - CS360Pro team
 
-> _"[PLACEHOLDER - what you built and what you learned, e.g. the Prism/Morpheus
-> MCP, the $ref suggester, or the AI argument-mapper.]"_
->
-> **Gurshan Cheema** — _[role / title]_
+> *"For the SaaS Engineering CS360Pro team, MCP Playground acts as a one-stop solution for MCP development, debugging, and observability.*
+> *Instead of juggling scripts, logs, and disconnected tools, engineers get a single visual space to build and troubleshoot workflows.*
+> *With live debugging, breakpoints, and runtime visibility, issues are identified earlier and fixed faster."*
 
-> _"[PLACEHOLDER - a sentence on your contribution, e.g. the MCP automapping / AI
-> service.]"_
->
-> **Nimish Duggal** — _[role / title]_
+
 
 ---
 
-:::note Add more voices
-To add a testimonial, copy a blockquote above, set the quote and the name/role.
-If you would like quotes from stakeholders outside the core team (a manager, an
-early user, a judge), add a new "Stakeholders" section in the same format.
-:::
