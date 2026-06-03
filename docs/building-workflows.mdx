@@ -1,0 +1,204 @@
+---
+id: building-workflows
+title: Building Workflows
+sidebar_label: Building Workflows
+sidebar_position: 1
+description: The workflow model - a DAG of tool-call nodes spanning many MCP servers - plus the two kinds of parallelism the engine gives you and the shapes of automation it unlocks.
+---
+
+# Building Workflows
+
+A workflow in MCP Playground is a **directed acyclic graph (DAG) of tool
+calls**. Each node names one tool and its arguments; edges express ordering and
+data flow. The engine figures out what can run, in what order, and what can run
+*at the same time* - you describe the shape, not the schedule.
+
+This chapter covers the model generically: how a workflow is structured, how a
+single workflow spans **many MCP servers**, the **two kinds of parallelism** you
+get for free, and the shapes of automation worth building. The two companion
+chapters go deeper on the moving parts:
+
+- [Data Flow & Live References](./data-flow-references.mdx) - how a node reads
+  an upstream node's result with `$ref`.
+- [Breakpoints & Debugging](./breakpoints-debugging.mdx) - how to pause,
+  inspect, edit, and resume a run.
+
+## The workflow model
+
+A workflow is a small JSON document: an `id`, a `version`, an optional `name`,
+and a list of `nodes`. Every node is one tool call:
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Unique name for the node, referenced by `$ref` and `dependsOn`. |
+| `tool` | The namespaced tool to call, in `server__tool` form. |
+| `args` | The arguments object - literals and/or `$ref`s into upstream results. |
+| `dependsOn` | Optional explicit ordering edges (data-flow edges are inferred). |
+| `breakpoint` | Optional `true` to pause the run before this node executes. |
+
+```json
+{
+  "id": "enrich-and-store",
+  "version": 1,
+  "nodes": [
+    { "id": "fetch",     "tool": "serverA__list_items", "args": { "limit": 50 } },
+    { "id": "transform", "tool": "serverC__summarize",
+      "args": { "rows": { "$ref": { "nodeId": "fetch", "path": "$.structuredContent.items" } } } },
+    { "id": "store",     "tool": "serverB__write_file",
+      "args": { "path": "out.json",
+                "data": { "$ref": { "nodeId": "transform", "path": "$.content[0].text" } } } }
+  ]
+}
+```
+
+You rarely hand-write `dependsOn`: when a node reads another node's result with
+`$ref`, that edge is **inferred** and folded into the dependency graph
+automatically (see [Data Flow & Live References](./data-flow-references.mdx)).
+The graph you get is exactly the data flow you wrote.
+
+## Multi-layered, multi-nodal
+
+Workflows are not limited to a straight line. A real automation is typically
+**wide and deep**: many nodes (multi-nodal) arranged in many layers
+(multi-layered). A "layer" is just the set of nodes whose dependencies are all
+satisfied at the same moment - the engine discovers layers from the edges; you
+never declare them. Roots (nodes with no incoming edges) form the first layer;
+each completion can unlock the next.
+
+## One workflow, many MCP servers
+
+The most important property: **a single workflow can call tools from many
+different MCP servers.** When the backend connects, it merges every server's
+tools into one **namespaced catalog** where each tool is addressed as
+`server__tool`. A node just names the tool it wants - `serverA__list_items`,
+`serverC__summarize`, `serverB__write_file` - and the proxy routes the call to
+the right server.
+
+That means a workflow can freely mix:
+
+- a **local `npx`** server (e.g. a filesystem or chart server),
+- a **hosted / remote** server, and
+- a **custom** server (such as the bundled [Prism MCP](./prism-morpheus-mcp.mdx)),
+
+all in the same run, with data flowing across server boundaries via `$ref`.
+Different tools, different MCP configs, one graph.
+
+## Parallelism, two ways
+
+The engine extracts parallelism from the graph - and it does so at two levels.
+
+### 1. Parallel branches inside one workflow
+
+Any nodes whose dependencies are already satisfied run **concurrently**. The
+scheduler keeps a `ready` set and an `inflight` map: it launches every ready
+node at once, then awaits `Promise.race` over the in-flight calls, unlocking
+each node's dependents the instant it finishes. This is what makes fan-out /
+fan-in natural - independent branches simply proceed in parallel.
+
+```startLine:287:300:MCP-Playground/backend/src/workflow/executor.ts
+      if (!signal?.aborted) {
+        for (const nodeId of [...ready]) {
+          ready.delete(nodeId);
+          const node = nodeById.get(nodeId)!;
+          inflight.set(nodeId, this.runNode(node, states, results, signal));
+        }
+      } else {
+        ready.clear();
+      }
+
+      if (inflight.size === 0) break;
+
+      const { nodeId: finished } = await Promise.race(inflight.values());
+```
+
+### 2. Many workflows at once on one session
+
+A single connection can run **multiple whole workflows concurrently.** Each
+`runWorkflow` carries its own `runId`, and the `Session` keys every active run
+in a map - so independent runs (each with its own executor, abort controller,
+and breakpoint state) execute side by side and stream events independently.
+
+```startLine:141:160:MCP-Playground/backend/src/server/session.ts
+    if (this.runs.has(msg.runId)) {
+      this.send({ type: 'error', runId: msg.runId, error: `Run "${msg.runId}" is already active` });
+      return;
+    }
+
+    const abort = new AbortController();
+    const pauseHandler = new WsPauseHandler(abort.signal);
+    const executor = new WorkflowExecutor(
+      {
+        call: (qualifiedName, args, options) =>
+          this.manager.callTool(qualifiedName, args, options),
+      },
+      pauseHandler,
+    );
+
+    // Stream every EngineEvent straight onto the socket under the client's runId.
+    const off = executor.on((event) =>
+      this.send({ type: 'engineEvent', runId: msg.runId, event }),
+    );
+    this.runs.set(msg.runId, { executor, abort, pauseHandler });
+```
+
+## A generic multi-layer DAG
+
+Putting it together: roots run in parallel, branches fan out across servers,
+results fan back in, and a final layer persists and publishes. The labels show
+which MCP server each node calls - **A**, **B**, and **C** are three different
+servers in one workflow.
+
+```mermaid
+flowchart TD
+  subgraph L0 ["Layer 0 - roots (run concurrently)"]
+    a1["list · server A"]
+    b1["list · server B"]
+  end
+  subgraph L1 ["Layer 1 - fetch / fan-out"]
+    a2["fetch · server A"]
+    b2["fetch · server B"]
+  end
+  subgraph L2 ["Layer 2 - transform (fan-in)"]
+    c1["combine · server C"]
+  end
+  subgraph L3 ["Layer 3 - render"]
+    c2["render · server C"]
+  end
+  subgraph L4 ["Layer 4 - persist + publish (parallel)"]
+    a3["write · server A"]
+    b3["notify · server B"]
+  end
+  a1 --> a2
+  b1 --> b2
+  a2 --> c1
+  b2 --> c1
+  c1 --> c2
+  c2 --> a3
+  c2 --> b3
+```
+
+Here `a1` and `b1` start together; `c1` waits for both upstream branches (fan-in);
+`a3` and `b3` run together once the render completes (fan-out). No layer numbers
+are written anywhere - the engine derives all of it from the edges.
+
+## Use cases: shapes worth building
+
+The model is general, but a handful of shapes recur:
+
+- **Fan-out / fan-in aggregation** - query several sources in parallel, then
+  combine their results in one downstream node.
+- **Read - transform - write enrichment** - pull data from one tool, reshape it
+  with another, and persist the result.
+- **Cross-system orchestration** - read from system A and act on system B in the
+  same run, with `$ref` carrying the hand-off.
+- **Gather - render - persist artifact generation** - collect data, render it
+  (a chart, a document), and save or publish the artifact.
+- **Guarded runs** - put a `breakpoint` on a sensitive node so a human can
+  inspect resolved arguments and choose to continue, edit, skip, or fail.
+- **Resume-after-failure** - re-run only the failed and remaining nodes by
+  seeding the already-completed results, instead of repeating the whole graph.
+- **Headless CI automation** - run the exact same workflow from the
+  [CLI](./cli.md) in a pipeline, gating on its exit code.
+
+With the model in hand, the next two chapters explain the two mechanisms that
+make these workflows expressive and safe: **data flow** and **breakpoints**.
