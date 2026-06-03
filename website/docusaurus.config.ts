@@ -7,7 +7,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const config: Config = {
   title: 'MCP Playground',
   tagline: 'Build, run, and debug multi-MCP workflows on a visual canvas',
-  favicon: 'img/favicon.ico',
+  favicon: 'img/favicon.svg',
 
   future: {
     v4: true,
@@ -61,7 +61,7 @@ const config: Config = {
   ],
 
   themeConfig: {
-    image: 'img/docusaurus-social-card.jpg',
+    image: 'img/favicon.svg',
     colorMode: {
       respectPrefersColorScheme: true,
     },
@@ -72,7 +72,7 @@ const config: Config = {
       title: 'MCP Playground',
       logo: {
         alt: 'MCP Playground',
-        src: 'img/logo.svg',
+        src: 'img/favicon.svg',
       },
       items: [
         {
@@ -113,7 +113,7 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} MCP Playground - Nutanix Hackathon. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} MCP Playground: Nutanix Hackathon.`,
     },
     prism: {
       theme: prismThemes.github,

@@ -6,12 +6,14 @@ sidebar_position: 2
 description: The $ref model that pipes one node's result into another's arguments via JSONPath, the normalization that turns data flow into dependencies, and the UI helper that suggests paths from a real response.
 ---
 
+import useBaseUrl from '@docusaurus/useBaseUrl';
+
 # Data Flow & Live References
 
-The thing that makes a workflow a *graph* and not a *list* is `$ref`: a way to
-pipe any field of one node's result into another node's arguments. This chapter
-covers how a reference is written, resolved, validated, and - crucially - how
-the UI helps you author one without guessing field paths.
+The thing that makes a workflow a *graph* is `$ref` as it is a way to
+pipe any field of one node's result into another node's arguments. Here, we
+cover how a reference is written, resolved, validated, and, crucially how
+the UI helps the user author one without guessing field paths.
 
 ## The shape of a reference
 
@@ -38,13 +40,10 @@ export const ValueRefSchema = z.object({
 export type ValueRef = z.infer<typeof ValueRefSchema>;
 ```
 
-:::info A reference replaces the *whole* value
-`$ref` resolution substitutes a value; it does **not** interpolate a reference
+A reference replaces the whole value
+`$ref` resolution substitutes a value; it does not interpolate a reference
 into a larger string. An argument is either a literal or a single `$ref`. This
-keeps resolution unambiguous and easy to reason about - the value a node
-receives is exactly one upstream result (or a path into it), never a templated
-mix of text and references.
-:::
+keeps resolution unambiguous and easy to reason about.
 
 ## Resolution: `resolveArgs`
 
@@ -89,39 +88,31 @@ export function resolveArgs(
 
 ## Data flow *is* dependency
 
-You never have to declare ordering by hand for a `$ref`. During
-`normalizeWorkflow`, every node's `$ref` sources are **folded into its
-`dependsOn`** set, so the dependency graph the scheduler walks already encodes
-the data flow. A node that reads `sum`'s output automatically waits for `sum`.
+Users rarely need to declare `dependsOn` explicitly. When a node references another node's output through `$ref`, that dependency is inferred automatically during workflow normalization.
+
+During `normalizeWorkflow`, the engine scans each node for `$ref` expressions, identifies the referenced source nodes, and adds those nodes to the node's dependency set. As a result, the execution graph reflects the workflow's data flow without requiring users to duplicate dependency declarations.
+
+At runtime, the scheduler uses this graph to determine execution order. A node cannot run until all of its dependencies have completed, ensuring that any values referenced through `$ref` are available when arguments are resolved.
 
 ```mermaid
 flowchart LR
   A["authored args<br/>(literals + $ref)"] --> B["validateRefs<br/>(targets exist, no self-ref)"]
-  B --> C["normalizeWorkflow<br/>($ref sources -> dependsOn)"]
-  C --> D["run time: resolveArgs<br/>(jsonPath into upstream result)"]
-  D --> E["resolved args -> tool call"]
+  B --> C["normalizeWorkflow<br/>($ref sources → dependsOn)"]
+  C --> D["scheduler uses<br/>derived dependency graph"]
+  D --> E["resolveArgs<br/>(read upstream outputs)"]
+  E --> F["invoke tool"]
 ```
 
-## A small, predictable JSONPath
+For example, if a node references the output of `sum` via `$ref`, `sum` is automatically added as a dependency. The scheduler will not execute the dependent node until `sum` has completed successfully.
+At runtime, the scheduler uses the derived dependency graph to determine execution order. Once a node's dependencies have completed, any `$ref` expressions in its arguments are resolved against the corresponding upstream results before the tool is invoked. References can target nested object fields and array elements, and invalid paths produce descriptive errors to simplify debugging.
 
-The resolver implements a deliberately **minimal JSONPath subset** - enough to
-reach into real tool results, with no surprising behavior:
-
-- Supported: `$`, `$.foo`, `$.foo.bar`, `$.foo[0]`, `$["weird.key"]`, and
-  arbitrary mixing like `$.foo[0].bar`.
-- Deliberately **not** supported in v1: wildcards (`$[*]`), recursive descent
-  (`$..foo`), and filter expressions (`$[?(...)]`).
-
-Errors are specific and actionable - "Path `$.a.b` expected object at `.b` but
-found array" - rather than a silent `undefined`.
-
-## Making every server's output reachable: structured enrichment
+## Structured Enrichment
 
 Different MCP servers return results in different shapes. Many older servers put
-their payload in a text block as a JSON *string* and never populate the
+their payload in a text block as a JSON string and never populate the
 structured-output field, which would mean a `$ref` could only ever reach the
-whole blob - never a nested field. The proxy fixes this **uniformly and
-conservatively** by lifting a JSON text block into `structuredContent`:
+whole blob never a nested field. The proxy fixes this uniformly and
+conservatively by lifting a JSON text block into `structuredContent`:
 
 ```startLine:294:323:MCP-Playground/backend/src/mcp/client-manager.ts
 export function enrichWithStructuredContent(result: unknown): unknown {
@@ -165,40 +156,15 @@ server chooses to format it:
   nested fields become reachable under `$.structuredContent...`.
 - Servers that return **plain prose or text** keep it at `$.content[0].text`.
 
-## Authoring without guessing: the path suggester
+## The Path Suggester
 
-Typing a JSONPath from memory is exactly the error-prone glue work the
-Playground removes. The UI's **"pick a value from the response"** modal
-(`RefPickerModal`) shows a source node's *actual* saved result and a clickable
-list of every JSONPath into it, derived by `suggestJsonPaths`. Each suggestion
-is tagged with the runtime type of its value, and the list can be filtered to
-the type the target argument expects.
+Authoring JSONPath by hand is error-prone, so the canvas does it for you. When you wire a `$ref`, the picker (`RefPickerModal`) inspects the source node's saved result and lists every resolvable path - each with its runtime type and a value preview - while a type filter narrows the list to what the target argument expects.
 
-```startLine:43:60:MCP-Playground/frontend/src/lib/workflow/suggest.ts
-export function suggestJsonPaths(
-  value: unknown,
-  opts: { maxPaths?: number; maxDepth?: number; arraySample?: number } = {},
-): PathSuggestion[] {
-  const maxPaths = opts.maxPaths ?? 400;
-  const maxDepth = opts.maxDepth ?? 12;
-  const arraySample = opts.arraySample ?? 5;
+<div className="img-gallery">
+  <figure>
+    <img src={useBaseUrl('/img/screenshots/path-suggester.png')} alt="The 'Pick a value from the response' modal listing 179 suggested JSONPaths for a nutanix__list_clusters result, each with its type and a value preview, shown above the raw response JSON" />
+    <figcaption>Picking a value from a live <code>nutanix__list_clusters</code> result - 179 typed, previewed paths (filterable by type) over the raw response.</figcaption>
+  </figure>
+</div>
 
-  const out: PathSuggestion[] = [];
-  const seen = new Set<string>();
-  const push = (p: string, v: unknown) => {
-    if (seen.has(p)) return;
-    seen.add(p);
-    out.push({ path: p, type: valueType(v) });
-  };
-```
-
-The path grammar used by the suggester matches the resolver exactly, so a path
-you click is guaranteed to be one the engine can resolve. This same "schema plus
-real response" context is what the [AI service](./ai-services.md) consumes to
-recommend mappings automatically.
-
-:::note Figure to capture
-A screenshot of the **"Pick a value from the response"** modal (the suggested
-paths list with type badges, alongside the raw result) belongs here. It needs a
-live run of the UI to capture.
-:::
+The paths come from `suggestJsonPaths`, which walks the result using the **same JSONPath grammar the runtime resolver uses** - so every suggestion is guaranteed to resolve at execution time. That same inventory also feeds the AI mapping service, which pairs it with tool schemas to recommend (or auto-build) node-to-node mappings.
