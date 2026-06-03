@@ -1,7 +1,8 @@
 import { ConfigValidationError, parseConfig } from '../config.js';
-import { ClientManager } from '../mcp/client-manager.js';
+import { ClientManager, type JsonSchema } from '../mcp/client-manager.js';
 import { WorkflowExecutor } from '../workflow/executor.js';
 import { parseWorkflow, WorkflowValidationError } from '../workflow/loader.js';
+import type { WorkflowNode } from '../types/workflow.js';
 import type { ClientMessage, ServerMessage } from './protocol.js';
 import { WsPauseHandler } from './ws-pause-handler.js';
 
@@ -153,6 +154,25 @@ export class Session {
       pauseHandler,
     );
 
+    // Build the input gate from the live tool catalog: a node whose required
+    // args are still blank (or which carries a half-wired $ref) pauses with
+    // source 'missing-input' so the user can fill them in / AI-map and resume.
+    const schemaByTool = new Map(
+      this.manager.getCatalog().map((t) => [t.qualifiedName, t.inputSchema]),
+    );
+    const needsInput = (
+      node: WorkflowNode,
+      resolvedArgs: Record<string, unknown>,
+      rawArgs: Record<string, unknown>,
+    ): string[] => {
+      const schema = schemaByTool.get(node.tool);
+      if (!schema) return [];
+      // `rawArgs` is the node's CURRENT authored args (updated when the user
+      // resumes with continue-with-args), so a manually filled value or AI map
+      // clears the gate instead of re-pausing on the original incomplete ref.
+      return missingRequiredArgs(schema, resolvedArgs, rawArgs);
+    };
+
     // Stream every EngineEvent straight onto the socket under the client's runId.
     const off = executor.on((event) =>
       this.send({ type: 'engineEvent', runId: msg.runId, event }),
@@ -163,6 +183,7 @@ export class Session {
       const result = await executor.run(workflow, {
         signal: abort.signal,
         seedResults: msg.seedResults,
+        needsInput,
       });
       this.send({ type: 'workflowResult', runId: msg.runId, result });
     } catch (err) {
@@ -213,4 +234,49 @@ export class Session {
     this.runs.clear();
     await this.manager.shutdown();
   }
+}
+
+// ── input-gate helpers ──────────────────────────────────────────────────────
+
+/**
+ * Required argument names that still need a value before the tool can run:
+ *   - a required field that resolved to undefined/null/"" (no value provided), or
+ *   - any field carrying a half-wired `$ref` (missing nodeId or path).
+ * Mirrors the frontend's run-gate checks (findMissingRequired + hasIncompleteRef)
+ * so the executor pauses on exactly the cases the UI would have blocked.
+ */
+function missingRequiredArgs(
+  schema: JsonSchema,
+  resolvedArgs: Record<string, unknown>,
+  rawArgs: Record<string, unknown>,
+): string[] {
+  const out = new Set<string>();
+  const required = Array.isArray(schema.required)
+    ? (schema.required as string[])
+    : [];
+  for (const name of required) {
+    const v = resolvedArgs[name];
+    if (v === undefined || v === null || v === '') out.add(name);
+  }
+  for (const [name, raw] of Object.entries(rawArgs)) {
+    if (isIncompleteRef(raw)) out.add(name);
+  }
+  return [...out];
+}
+
+/** A `{ $ref: { nodeId, path } }` value that is missing its node or path. */
+function isIncompleteRef(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const wrapped = value as Record<string, unknown>;
+  if (
+    !wrapped.$ref ||
+    typeof wrapped.$ref !== 'object' ||
+    Array.isArray(wrapped.$ref)
+  ) {
+    return false;
+  }
+  const ref = wrapped.$ref as Record<string, unknown>;
+  const nodeId = typeof ref.nodeId === 'string' ? ref.nodeId : '';
+  const path = typeof ref.path === 'string' ? ref.path : '';
+  return !nodeId || !path.trim();
 }

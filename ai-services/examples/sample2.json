@@ -1,0 +1,32 @@
+{
+  "currentNode": {
+    "tool": "get_number_vms",
+    "description": "Returns the Number of VMs for the given account",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "account_id": {
+          "type": "string",
+          "description": "The account_id of the caller"
+        }
+      },
+      "required": ["account_id"]
+    }
+  },
+  "previousNodes": [
+    {
+      "nodeId": "account_id",
+      "tool": "get_account_id",
+      "description": "Takes the account name and returns the account_id",
+      "response": {
+        "content": [
+          {
+            "type": "text",
+            "text": "a1"
+          }
+        ],
+        "isError": false
+      }
+    }
+  ]
+}

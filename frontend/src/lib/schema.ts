@@ -71,6 +71,39 @@ export function findMissingRequired(schema: JsonSchema, args: Record<string, unk
   });
 }
 
+// Arg names carrying a half-wired `$ref` (missing nodeId or path). Such a value
+// can't resolve at run time, so it still "needs input".
+export function incompleteRefArgNames(args: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  for (const [name, v] of Object.entries(args)) {
+    if (!v || typeof v !== "object" || Array.isArray(v)) continue;
+    const ref = (v as Record<string, unknown>).$ref;
+    if (!ref || typeof ref !== "object" || Array.isArray(ref)) continue;
+    const r = ref as Record<string, unknown>;
+    const nodeId = typeof r.nodeId === "string" ? r.nodeId : "";
+    const path = typeof r.path === "string" ? r.path : "";
+    if (!nodeId || !path.trim()) out.push(name);
+  }
+  return out;
+}
+
+// The arg names a node still needs before it can run: required fields that are
+// blank in the (resolved) args, plus any field with a half-wired $ref in the raw
+// args. Shared by the executor's input pause and the canvas run-gate hint so both
+// agree on what counts as "needs input".
+export function missingInputArgs(
+  schema: JsonSchema,
+  resolvedArgs: Record<string, unknown>,
+  rawArgs: Record<string, unknown>,
+): string[] {
+  return [
+    ...new Set([
+      ...findMissingRequired(schema, resolvedArgs),
+      ...incompleteRefArgNames(rawArgs),
+    ]),
+  ];
+}
+
 // --- Args validation against a tool's inputSchema -------------------------
 
 export type ArgIssue = { path: string; message: string };

@@ -1,0 +1,62 @@
+{
+  "currentNode": {
+    "tool": "get_number_vms",
+    "description": "Returns the Number of VMs for the given account",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "account_id": {
+          "type": "string",
+          "description": "The account_id of the caller"
+        },
+        "HypervisorType":{
+            "type": "string",
+            "description": "Type of Hypervisor for which you want the filters"
+        }
+      },
+      "required": ["account_id"]
+    }
+  },
+  "previousNodes": [
+    {
+      "nodeId": "account_id",
+      "tool": "get_account_id",
+      "description": "Takes the account name and returns the account_id",
+      "response": {
+        "content": {
+            "account_name":{
+                "type": "text",
+                "text": "Walmart"
+            },
+            "account_id":{
+                "type": "text",
+                "text": "a1"
+            }
+        },
+        "isError": false
+      }
+    }, 
+    {
+      "nodeId": "Hypervisor_type",
+      "tool": "hypervisorType",
+      "description": "Takes the account id and returns the hypervisor type running for that account",
+      "response": {
+        "content": {
+            "number_of_clusters":{
+                "type": "integer",
+                "text": 4
+            },
+            "type_of_clusters":{
+                "type": "text",
+                "text": "2123"
+            },
+            "hypervisor_type":{
+                "type": "text",
+                "text": "AHV"
+            }
+        },
+        "isError": false
+      }
+    }
+  ]
+}

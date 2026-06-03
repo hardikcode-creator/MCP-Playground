@@ -4,7 +4,10 @@ import { Chevron, Play, Spinner } from "../../lib/icons";
 import { validateArgs } from "../../lib/schema";
 import { resolveValueRefsDetailed } from "../../lib/workflowRefs";
 import { ArgsInput } from "./ArgsInput";
+import { AiMapPanel, initialAiMapPanelState } from "./AiMapPanel";
+import type { AiMapPanelState } from "./AiMapPanel";
 import { ResponseViewer } from "./ResponseViewer";
+import type { AiPreviousNode } from "../../data/aiClient";
 import type { WorkflowState } from "../../state/workflowStore";
 import type { RunStatus, ToolResult } from "../../types";
 
@@ -27,6 +30,10 @@ export function ToolInspectorPane({
   onCollapse?: () => void;
 }) {
   const [copyState, setCopyState] = useState<"idle" | "ok" | "error">("idle");
+  // AI mapping result is kept per node id so each node remembers its own
+  // suggestions when you switch away and come back, while never showing one
+  // node's mappings on another node.
+  const [aiMapStateByNode, setAiMapStateByNode] = useState<Record<string, AiMapPanelState>>({});
   const {
     inspectorSource,
     selectedWorkflowNodeId,
@@ -121,6 +128,36 @@ export function ToolInspectorPane({
     if (!workflow) return [];
     return workflow.nodes.map((n) => ({ id: n.id, label: n.id, tool: n.data.qualifiedName }));
   }, [workflow]);
+
+  // Upstream nodes (with a captured response) the AI can map FROM. Demo scope:
+  // map ONLY from this node's direct predecessors — the "previous nodes" wired by
+  // an edge into it. There is intentionally NO fallback to arbitrary unconnected
+  // nodes, so the Auto-map button is a no-op unless the node actually has a
+  // previous-node reference in the workflow (and that node has produced output).
+  const aiPreviousNodes = useMemo<AiPreviousNode[]>(() => {
+    if (!workflow || !selectedWorkflowNode) return [];
+    const currentId = selectedWorkflowNode.id;
+
+    const toEntry = (nodeId: string): AiPreviousNode | null => {
+      const n = workflow.getNodeById(nodeId);
+      if (!n || n.id === currentId) return null;
+      const response = nodeStructureSample(nodeId);
+      if (!response) return null;
+      return {
+        nodeId: n.id,
+        tool: n.data.qualifiedName,
+        description: n.data.description,
+        response,
+      };
+    };
+
+    const predecessorIds = [
+      ...new Set(workflow.edges.filter((e) => e.target === currentId).map((e) => e.source)),
+    ];
+    return predecessorIds
+      .map(toEntry)
+      .filter((e): e is AiPreviousNode => e !== null);
+  }, [workflow, selectedWorkflowNode, nodeStructureSample]);
 
   const paused = selectedWorkflowNode?.data.status === "paused";
   const runningState = selectedWorkflowNode ? selectedWorkflowNode.data.status === "running" : running;
@@ -227,6 +264,23 @@ export function ToolInspectorPane({
               )}
             </div>
 
+            {selectedWorkflowNode && (
+              <AiMapPanel
+                currentNode={{
+                  tool: selectedDescriptor.qualifiedName,
+                  description: selectedDescriptor.description,
+                  inputSchema: selectedDescriptor.inputSchema,
+                }}
+                previousNodes={aiPreviousNodes}
+                argsText={effectiveArgsText}
+                onChangeArgs={setEffectiveArgsText}
+                state={aiMapStateByNode[selectedWorkflowNode.id] ?? initialAiMapPanelState}
+                onStateChange={(next) =>
+                  setAiMapStateByNode((prev) => ({ ...prev, [selectedWorkflowNode.id]: next }))
+                }
+              />
+            )}
+
             {selectedWorkflowNode && liveResolvedPreview && (
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
@@ -249,13 +303,42 @@ export function ToolInspectorPane({
 
             {paused && selectedWorkflowNode && workflow ? (
               <div className="flex flex-col gap-2 rounded-lg border border-amber-700/50 bg-amber-950/30 p-2.5">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-amber-400" />
-                  <span className="text-xs font-semibold text-amber-300">Paused at breakpoint</span>
-                </div>
-                <p className="text-[11px] text-amber-200/70">
-                  Edit the arguments above to resume with changes, or skip this node.
-                </p>
+                {selectedWorkflowNode.data.pauseSource === "missing-input" ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                      <span className="text-xs font-semibold text-amber-300">
+                        Needs input — provide arguments to continue
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-amber-200/70">
+                      This node is missing required values. Fill them in the args above, or use
+                      “Auto-map with AI”, then Resume. Resuming while values are still empty pauses here again.
+                    </p>
+                    {(selectedWorkflowNode.data.missingArgs?.length ?? 0) > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {selectedWorkflowNode.data.missingArgs?.map((name) => (
+                          <span
+                            key={name}
+                            className="rounded border border-amber-700/50 bg-amber-900/30 px-1.5 py-0.5 font-mono text-[10px] text-amber-200"
+                          >
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                      <span className="text-xs font-semibold text-amber-300">Paused at breakpoint</span>
+                    </div>
+                    <p className="text-[11px] text-amber-200/70">
+                      Edit the arguments above to resume with changes, or skip this node.
+                    </p>
+                  </>
+                )}
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"

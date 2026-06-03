@@ -262,6 +262,26 @@ export function Play({ className }: { className?: string }) {
   );
 }
 
+export function Sparkles({ className }: { className?: string }) {
+  return (
+    <svg
+      width={14}
+      height={14}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`shrink-0 ${className ?? ""}`}
+      aria-hidden="true"
+    >
+      <path d="M12 3l1.8 4.9L18.7 9.7l-4.9 1.8L12 16.4l-1.8-4.9L5.3 9.7l4.9-1.8z" />
+      <path d="M18.5 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" />
+    </svg>
+  );
+}
+
 export function Spinner({ className }: { className?: string }) {
   return (
     <svg

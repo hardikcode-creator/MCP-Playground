@@ -134,8 +134,13 @@ export type WorkflowRunResult = {
 export type BreakpointContext = {
   nodeId: string;
   tool: string;
-  source: 'authored' | 'runtime';
+  source: 'authored' | 'runtime' | 'missing-input';
   args: Record<string, unknown>;
+  /**
+   * Only set when `source === 'missing-input'`: the required argument names that
+   * are still empty, so the UI can tell the user exactly what to fill in.
+   */
+  missingArgs?: string[];
 };
 
 /**
@@ -171,6 +176,7 @@ export type EngineEvent =
       nodeId: string;
       source: BreakpointContext['source'];
       args: Record<string, unknown>;
+      missingArgs?: string[];
     }
   | {
       type: 'node.resumed';

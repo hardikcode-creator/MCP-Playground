@@ -67,8 +67,10 @@ export type WorkflowRunResult = {
 export type BreakpointContext = {
   nodeId: string;
   tool: string;
-  source: "authored" | "runtime";
+  source: "authored" | "runtime" | "missing-input";
   args: Record<string, unknown>;
+  // Only set when source === 'missing-input': the still-empty required arg names.
+  missingArgs?: string[];
 };
 
 export type PauseAction =
@@ -82,7 +84,7 @@ export type EngineEvent =
   | { type: "workflow.started"; runId: string; workflowId: string }
   | { type: "node.ready"; nodeId: string }
   | { type: "node.started"; nodeId: string; tool: string; resolvedArgs: Record<string, unknown> }
-  | { type: "node.paused"; nodeId: string; source: BreakpointContext["source"]; args: Record<string, unknown> }
+  | { type: "node.paused"; nodeId: string; source: BreakpointContext["source"]; args: Record<string, unknown>; missingArgs?: string[] }
   | { type: "node.resumed"; nodeId: string; action: PauseAction["type"] }
   | { type: "breakpoint.added"; nodeId: string }
   | { type: "breakpoint.cleared"; nodeId: string }

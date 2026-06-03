@@ -1,0 +1,32 @@
+{
+  "currentNode": {
+    "tool": "everything__echo",
+    "description": "Echoes back the provided message string.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string",
+          "description": "The text to echo back to the caller."
+        }
+      },
+      "required": ["message"]
+    }
+  },
+  "previousNodes": [
+    {
+      "nodeId": "sum",
+      "tool": "everything__get-sum",
+      "description": "Adds two numbers and returns the result as text content.",
+      "response": {
+        "content": [
+          {
+            "type": "text",
+            "text": "12"
+          }
+        ],
+        "isError": false
+      }
+    }
+  ]
+}

@@ -15,22 +15,28 @@ import {
   getCvmById,
 } from './nutanix-client.js';
 
+const LIST_QUERY_SCHEMA_PROPS = {
+  page: {
+    type: 'number',
+    description: 'Zero-based page index (default 0)',
+  },
+  limit: {
+    type: 'number',
+    description: 'Maximum number of results to return (default 50)',
+  },
+  select: {
+    type: 'string',
+    description: 'Optional fields selector forwarded as $select',
+  },
+} as const;
+
 const TOOLS = [
   {
     name: 'list_clusters',
     description: 'List Nutanix clusters visible from Prism Central.',
     inputSchema: {
       type: 'object',
-      properties: {
-        page: {
-          type: 'number',
-          description: 'Zero-based page index (default 0)',
-        },
-        limit: {
-          type: 'number',
-          description: 'Maximum number of results to return (default 50)',
-        },
-      },
+      properties: LIST_QUERY_SCHEMA_PROPS,
       additionalProperties: false,
     },
   },
@@ -54,16 +60,7 @@ const TOOLS = [
     description: 'List virtual machines managed by Prism Central.',
     inputSchema: {
       type: 'object',
-      properties: {
-        page: {
-          type: 'number',
-          description: 'Zero-based page index (default 0)',
-        },
-        limit: {
-          type: 'number',
-          description: 'Maximum number of results to return (default 50)',
-        },
-      },
+      properties: LIST_QUERY_SCHEMA_PROPS,
       additionalProperties: false,
     },
   },
@@ -92,14 +89,7 @@ const TOOLS = [
           type: 'string',
           description: 'External UUID of the VM',
         },
-        page: {
-          type: 'number',
-          description: 'Zero-based page index (default 0)',
-        },
-        limit: {
-          type: 'number',
-          description: 'Maximum number of results to return (default 50)',
-        },
+        ...LIST_QUERY_SCHEMA_PROPS,
       },
       required: ['vmExtId'],
       additionalProperties: false,
@@ -115,6 +105,7 @@ const TOOLS = [
           type: 'string',
           description: 'External UUID of the cluster',
         },
+        ...LIST_QUERY_SCHEMA_PROPS,
       },
       required: ['clusterExtId'],
       additionalProperties: false,
@@ -157,16 +148,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args = {} } = request.params;
   const a = args as Record<string, unknown>;
+  const listOpts = {
+    page: typeof a.page === 'number' ? a.page : 0,
+    limit: typeof a.limit === 'number' ? a.limit : 50,
+    select: typeof a.select === 'string' ? a.select : undefined,
+  };
 
   try {
     let result: unknown;
 
     switch (name) {
       case 'list_clusters':
-        result = await listClusters(
-          typeof a.page === 'number' ? a.page : 0,
-          typeof a.limit === 'number' ? a.limit : 50,
-        );
+        result = await listClusters(listOpts);
         break;
 
       case 'get_cluster_by_id':
@@ -177,10 +170,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
 
       case 'list_vms':
-        result = await listVms(
-          typeof a.page === 'number' ? a.page : 0,
-          typeof a.limit === 'number' ? a.limit : 50,
-        );
+        result = await listVms(listOpts);
         break;
 
       case 'get_vm_by_id':
@@ -196,8 +186,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         result = await listDisksByVmId(
           a.vmExtId,
-          typeof a.page === 'number' ? a.page : 0,
-          typeof a.limit === 'number' ? a.limit : 50,
+          listOpts,
         );
         break;
 
@@ -205,7 +194,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (typeof a.clusterExtId !== 'string' || !a.clusterExtId) {
           throw new Error('clusterExtId is required and must be a string');
         }
-        result = await listCvmsByClusterId(a.clusterExtId);
+        result = await listCvmsByClusterId(a.clusterExtId, listOpts);
         break;
 
       case 'get_cvm_by_id':

@@ -22,7 +22,7 @@ import {
   validateDependsOn,
   validateRefs,
 } from "./graph";
-import { RefResolutionError, resolveArgs } from "./refs";
+import { RefResolutionError, resolveArgs, walkRefs } from "./refs";
 
 // Calls a single MCP tool. The executor depends on this interface rather than
 // a concrete client so the mock (now) and the WebSocket transport (later) can
@@ -58,6 +58,18 @@ export type RunOptions = {
   // re-run) and their results feed downstream $ref resolution, so only the
   // failed/remaining nodes execute. Same object the executor would have cached.
   seedResults?: Record<string, unknown>;
+  // Optional input gate. Returns the arg names that still need a value before the
+  // node can run. Receives the args AFTER $ref resolution (resolvedArgs, for
+  // required/blank checks) and the CURRENT raw args (rawArgs, for detecting
+  // half-wired $refs). rawArgs reflects edits made at a pause (continue-with-args)
+  // so a manually filled / AI-mapped value clears the gate. A non-empty result
+  // pauses the node with source 'missing-input' (not a breakpoint). Resuming
+  // while still-missing re-pauses. Omitted → no input gating (unchanged).
+  needsInput?: (
+    node: WorkflowNode,
+    resolvedArgs: Record<string, unknown>,
+    rawArgs: Record<string, unknown>,
+  ) => string[];
 };
 
 export class WorkflowExecutor {
@@ -187,7 +199,7 @@ export class WorkflowExecutor {
         for (const nodeId of [...ready]) {
           ready.delete(nodeId);
           const node = nodeById.get(nodeId)!;
-          inflight.set(nodeId, this.runNode(node, states, results, signal));
+          inflight.set(nodeId, this.runNode(node, states, results, signal, options.needsInput));
         }
       } else {
         ready.clear();
@@ -252,11 +264,30 @@ export class WorkflowExecutor {
     }
   }
 
+  // Like tryResolveArgs but NEVER fails the node: returns resolved args on
+  // success or null on any resolution problem. Used by the input-required gate
+  // so a $ref the user/AI wired that doesn't resolve yet re-pauses for a fix.
+  private softResolveArgs(
+    rawArgs: Record<string, unknown>,
+    results: Map<string, unknown>,
+  ): Record<string, unknown> | null {
+    try {
+      const resolved = resolveArgs(rawArgs, results);
+      if (typeof resolved !== "object" || resolved === null || Array.isArray(resolved)) {
+        return null;
+      }
+      return resolved as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
   private async runNode(
     node: WorkflowNode,
     states: Map<string, NodeRunState>,
     results: Map<string, unknown>,
     signal: AbortSignal | undefined,
+    needsInput?: RunOptions["needsInput"],
   ): Promise<{ nodeId: string }> {
     const state = states.get(node.id)!;
     const startedAt = Date.now();
@@ -280,6 +311,41 @@ export class WorkflowExecutor {
         if (reresolved === null) return { nodeId: node.id };
         resolvedArgs = reresolved;
         state.resolvedArgs = resolvedArgs;
+      }
+    }
+
+    // 2b. Input-required gate. If a node's args are still missing/blank — or a
+    // $ref the user/AI wired doesn't resolve yet — pause WITHOUT a breakpoint and
+    // ask the user to provide them (manually or via AI auto-map). Loop so that
+    // resuming while values are still missing/unresolvable re-pauses rather than
+    // calling the tool with bad args. `rawArgs` tracks the CURRENT authored args
+    // (updated by continue-with-args) so a manual edit / AI map clears the gate
+    // instead of re-pausing on the original, now-stale args.
+    if (needsInput) {
+      let rawArgs: Record<string, unknown> = state.typedArgs ?? node.args;
+      for (;;) {
+        if (signal?.aborted) return { nodeId: node.id };
+        // Resolve softly so an edit that introduces an unresolvable $ref re-pauses
+        // (lets the user fix it) instead of finalizing the node as failed.
+        const resolved = this.softResolveArgs(rawArgs, results);
+        let missing: string[];
+        if (resolved !== null) {
+          resolvedArgs = resolved;
+          state.resolvedArgs = resolvedArgs;
+          missing = needsInput(node, resolvedArgs, rawArgs);
+        } else {
+          const refArgs = argNamesWithValueRefs(rawArgs);
+          missing = refArgs.length > 0 ? refArgs : Object.keys(rawArgs);
+        }
+        if (missing.length === 0) break;
+        const outcome = await this.handlePause(node, state, "missing-input", resolvedArgs, signal, missing);
+        if (outcome.kind === "terminal") return { nodeId: node.id };
+        if (outcome.kind === "args") {
+          rawArgs = outcome.args;
+          state.typedArgs = outcome.args;
+        }
+        // A plain 'continue' falls through to the loop's re-check (re-pause if
+        // the user resumed without fixing the missing values).
       }
     }
 
@@ -314,6 +380,7 @@ export class WorkflowExecutor {
     source: BreakpointContext["source"],
     args: Record<string, unknown>,
     signal: AbortSignal | undefined,
+    missingArgs?: string[],
   ): Promise<
     | { kind: "continue" }
     | { kind: "args"; args: Record<string, unknown> }
@@ -321,11 +388,18 @@ export class WorkflowExecutor {
   > {
     if (signal?.aborted) return { kind: "terminal" };
 
-    const ctx: BreakpointContext = { nodeId: node.id, tool: node.tool, source, args };
+    const hasMissing = Boolean(missingArgs && missingArgs.length > 0);
+    const ctx: BreakpointContext = {
+      nodeId: node.id,
+      tool: node.tool,
+      source,
+      args,
+      ...(hasMissing ? { missingArgs } : {}),
+    };
 
     const previousStatus = state.status;
     state.status = "paused";
-    this.emit({ type: "node.paused", nodeId: node.id, source, args });
+    this.emit({ type: "node.paused", nodeId: node.id, source, args, ...(hasMissing ? { missingArgs } : {}) });
 
     const action = await raceWithSignal(this.pauseHandler.onBreakpoint(ctx, signal), signal);
 
@@ -481,4 +555,18 @@ function describe(v: unknown): string {
   if (v === null) return "null";
   if (Array.isArray(v)) return "array";
   return typeof v;
+}
+
+// Top-level argument names whose value contains a $ref (at any depth). Used to
+// point the user at the fields to fix when resolution of edited args fails.
+function argNamesWithValueRefs(args: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  for (const [name, value] of Object.entries(args)) {
+    let hasRef = false;
+    walkRefs(value, () => {
+      hasRef = true;
+    });
+    if (hasRef) out.push(name);
+  }
+  return out;
 }

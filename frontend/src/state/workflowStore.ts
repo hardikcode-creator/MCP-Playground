@@ -13,12 +13,12 @@ import type {
   Connection,
 } from "@xyflow/react";
 import type { NodeStatus, ToolDescriptor, ToolResult } from "../types";
-import { seedArgs } from "../lib/schema";
+import { seedArgs, missingInputArgs } from "../lib/schema";
 import { serializeWorkflow } from "../lib/workflow/serialize";
 import { createWorkflowRunner } from "../data/mcpClient";
 import type { CallToolFn, WorkflowRunner } from "../data/mcpClient";
 import type { PauseHandler } from "../lib/workflow/executor";
-import type { EngineEvent, PauseAction, Workflow, WorkflowRunResult, WorkflowStatus } from "../lib/workflow/types";
+import type { BreakpointContext, EngineEvent, PauseAction, Workflow, WorkflowNode, WorkflowRunResult, WorkflowStatus } from "../lib/workflow/types";
 
 export type ToolNodeData = {
   qualifiedName: string;
@@ -32,6 +32,12 @@ export type ToolNodeData = {
   // Authored breakpoint — serialized into the Workflow JSON and checked by the
   // executor before the node's tool call (matches backend `breakpoint: true`).
   breakpoint: boolean;
+  // Why this node is currently paused: 'authored'/'runtime' breakpoint, or
+  // 'missing-input' (required args still need a value). Set on node.paused,
+  // cleared when it proceeds or finishes. Undefined when not paused.
+  pauseSource?: BreakpointContext["source"];
+  // For a 'missing-input' pause: the required arg names still needing a value.
+  missingArgs?: string[];
 };
 
 export type WorkflowState = {
@@ -268,7 +274,7 @@ export function useWorkflowStore(): WorkflowState {
     setNodes((nds) =>
       nds.map((n) => ({
         ...n,
-        data: { ...n.data, status: "idle" as NodeStatus, lastResult: null },
+        data: { ...n.data, status: "idle" as NodeStatus, lastResult: null, pauseSource: undefined, missingArgs: undefined },
       })),
     );
   }, []);
@@ -278,22 +284,42 @@ export function useWorkflowStore(): WorkflowState {
     switch (event.type) {
       case "workflow.started":
         // Everything is queued; roots will flip to ready immediately after.
-        setNodes((nds) => nds.map((n) => ({ ...n, data: { ...n.data, status: "pending" as NodeStatus } })));
+        setNodes((nds) =>
+          nds.map((n) => ({
+            ...n,
+            data: { ...n.data, status: "pending" as NodeStatus, pauseSource: undefined, missingArgs: undefined },
+          })),
+        );
         break;
       case "node.ready":
         setNodeStatus(event.nodeId, "ready");
         break;
       case "node.started":
-        setNodeStatus(event.nodeId, "running");
+        // Clear any pause metadata: the node is now actually running.
+        setNodes((nds) =>
+          nds.map((n) =>
+            n.id === event.nodeId
+              ? { ...n, data: { ...n.data, status: "running", pauseSource: undefined, missingArgs: undefined } }
+              : n,
+          ),
+        );
         break;
       case "node.paused":
-        setNodeStatus(event.nodeId, "paused");
+        setNodes((nds) =>
+          nds.map((n) =>
+            n.id === event.nodeId
+              ? { ...n, data: { ...n.data, status: "paused", pauseSource: event.source, missingArgs: event.missingArgs } }
+              : n,
+          ),
+        );
         break;
       case "node.completed": {
         const result = event.result as ToolResult;
         setNodes((nds) =>
           nds.map((n) =>
-            n.id === event.nodeId ? { ...n, data: { ...n.data, status: "completed", lastResult: result } } : n,
+            n.id === event.nodeId
+              ? { ...n, data: { ...n.data, status: "completed", lastResult: result, pauseSource: undefined, missingArgs: undefined } }
+              : n,
           ),
         );
         break;
@@ -302,7 +328,7 @@ export function useWorkflowStore(): WorkflowState {
         setNodes((nds) =>
           nds.map((n) =>
             n.id === event.nodeId
-              ? { ...n, data: { ...n.data, status: "failed", lastResult: errorResult(event.error) } }
+              ? { ...n, data: { ...n.data, status: "failed", lastResult: errorResult(event.error), pauseSource: undefined, missingArgs: undefined } }
               : n,
           ),
         );
@@ -336,7 +362,7 @@ export function useWorkflowStore(): WorkflowState {
           nds.map((n) =>
             seededIds.has(n.id)
               ? n
-              : { ...n, data: { ...n.data, status: "idle" as NodeStatus, lastResult: null } },
+              : { ...n, data: { ...n.data, status: "idle" as NodeStatus, lastResult: null, pauseSource: undefined, missingArgs: undefined } },
           ),
         );
       } else {
@@ -361,6 +387,23 @@ export function useWorkflowStore(): WorkflowState {
           }),
       };
 
+      // Input gate for the local runner: map each node back to its canvas
+      // inputSchema so a node whose required args are still blank (or which
+      // carries a half-wired $ref) pauses with source 'missing-input'. The
+      // WebSocket runner ignores this and the backend computes the same gate.
+      const schemaByNodeId = new Map(nodesRef.current.map((n) => [n.id, n.data.inputSchema]));
+      const needsInput = (
+        node: WorkflowNode,
+        resolvedArgs: Record<string, unknown>,
+        rawArgs: Record<string, unknown>,
+      ): string[] => {
+        const schema = schemaByNodeId.get(node.id);
+        if (!schema) return [];
+        // rawArgs is the node's CURRENT authored args (reflects edits made at a
+        // pause), so a manually filled value / AI map clears the gate.
+        return missingInputArgs(schema, resolvedArgs, rawArgs);
+      };
+
       const runner = createWorkflowRunner(callTool);
       runnerRef.current = runner;
       try {
@@ -369,6 +412,7 @@ export function useWorkflowStore(): WorkflowState {
           pauseHandler,
           signal: controller.signal,
           seedResults,
+          needsInput,
         });
         // Capture the finished run so the canvas can show a terminal status
         // chip and offer a "Save response" download.
