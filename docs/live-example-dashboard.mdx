@@ -1,0 +1,150 @@
+---
+id: live-example-dashboard
+title: "Example"
+sidebar_label: 7. Example
+sidebar_position: 8
+description: The headline workflow - 61 nodes across 8 layers, orchestrating six MCP servers to collect Nutanix data, render charts, persist, summarize, build a knowledge graph, and publish a dashboard to a GitHub repo and PR.
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+import useBaseUrl from '@docusaurus/useBaseUrl';
+
+# Example: Metrics-to-Dashboard Pipeline
+
+To showcase MCP Playground's orchestration capabilities, we built an end-to-end analytics workflow spanning six MCP servers and 61 workflow nodes. In a single execution, the workflow collects infrastructure data from Nutanix Prism, generates visual dashboards, persists artifacts, builds a knowledge graph, and publishes the results to a newly created GitHub repository through an automated pull request workflow.
+
+The entire process is defined declaratively as a DAG and executed by the MCP Playground engine. Data flows across server boundaries through references, while breakpoints allow each stage to be inspected, debugged, and controlled in real time.
+
+**61 Nodes • 8 Layers • 6 MCP Servers • 1 Click**
+
+<div className="img-gallery">
+  <figure>
+    <img src={useBaseUrl('/img/screenshots/homepage-servers.png')} alt="MCP Playground home screen with all six MCP servers parsed from a single config and marked ready to connect" />
+    <figcaption>The entry point - drop in one <code>mcp-config.json</code> and all six servers are parsed and "ready to connect"; one click opens the workspace.</figcaption>
+  </figure>
+</div>
+
+## MCP Servers Config
+
+The whole orchestration is declared in one `mcp-config.json`. Five servers run
+via `npx`; the sixth is the Collector MCP Server built from **Morpheus** launched with `uv`.
+
+<Tabs>
+<TabItem value="config" label="mcp-config (6 servers)" default>
+
+```json
+{
+  "mcpServers": {
+    "collector": {
+      "command": "uv",
+      "args": ["run", "--directory", "<repo>/prism-mcp/mcp-server", "python", "server.py"]
+    },
+    "chart":      { "command": "npx", "args": ["-y", "@antv/mcp-server-chart"] },
+    "filesystem": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "<example-dir>"] },
+    "everything": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-everything"] },
+    "memory":     { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-memory"] },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_REPLACE_WITH_YOUR_TOKEN" }
+    }
+  }
+}
+```
+
+</TabItem>
+<TabItem value="roles" label="What each server does">
+
+- **collector** - the generated Prism MCP (REST over collected SQLite data).
+- **chart** - [`@antv/mcp-server-chart`](https://github.com/antvis/mcp-server-chart): renders line/donut images, returns a URL.
+- **filesystem** - persists chart URLs into the example's `output/` folder.
+- **everything** - `echo` milestones and `get-sum` totals.
+- **memory** - a cluster -> host -> vm knowledge graph.
+- **github** - repo, branch, commits, PR, and merge.
+
+</TabItem>
+</Tabs>
+
+## Multi Layered & Multi Nodal
+
+Each layer depends on the previous one's data, threaded through with `$ref`:
+
+```mermaid
+flowchart TD
+  L1["1 · Discover (collector)<br/>health, databases, metadata, clusters, vms"]
+  L2["2 · Drill down (collector)<br/>cluster, hosts, vms + their perf"]
+  L3["3 · Chart specs (collector)<br/>line + capacity-pie specs"]
+  L4["4 · Visualize (chart / AntV)<br/>line & donut charts to image URLs"]
+  L5["5 · Persist (filesystem)<br/>create dir, write_file, list"]
+  L6["6 · Summarize (everything)<br/>get statistics"]
+  L7["7 · Knowledge graph (memory)<br/>entities & relations to read graph"]
+  L8["8 · Publish (github)<br/>create repo -> create branch -> list commits & make a commit -> raise PR -> merge PR"]
+  L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7 --> L8
+```
+
+<div className="img-gallery">
+  <figure>
+    <img src={useBaseUrl('/img/screenshots/workflow-canvas.png')} alt="The workflow canvas showing the full 61-node, 87-edge DAG paused at breakpoints, with the Tool Inspector displaying a node's live resolved args and parsed response" />
+    <figcaption>The same workflow on the canvas - 61 nodes, 87 edges, paused at breakpoints (3) - with the Tool Inspector showing a selected node's live resolved args and its parsed response.</figcaption>
+  </figure>
+</div>
+
+## Consistent Data Flow
+
+A crucial part of multi-MCP orchestration is that **every server returns a
+different shape**. This workflow mixes all three, resolved with the
+[structured-content enrichment](./data-flow-references.mdx) from earlier:
+
+- **collector**: `$.structuredContent.data.api_response...` (e.g. first cluster
+  id = `$.structuredContent.data.api_response[0].moid`).
+- **chart / filesystem / memory**: `$.content[0].text` (e.g. a chart's image
+  URL).
+- **github**: top-level structured fields - repo owner =
+  `$.structuredContent.owner.login`, PR number = `$.structuredContent.number`.
+
+## Step through it with breakpoints
+
+The example ships with multiple breakpoints so the user can pause and inspect each phase: the
+discovered metadata, the drilled-into cluster, the first rendered chart URL, the
+final knowledge graph, the new repo, the opened PR, and the inspected PR.
+
+## The output: From Raw Data To Actionable Insights
+
+The `chart` server returns hosted image URLs. Here are the  produced by a real run against the
+bundled sample database:
+
+<div className="img-gallery">
+  <figure>
+    <img src={useBaseUrl('/img/charts/cluster-line.png')} alt="Cluster performance line chart" />
+    <figcaption>Cluster performance (line)</figcaption>
+  </figure>
+  <figure>
+    <img src={useBaseUrl('/img/charts/host-line.png')} alt="Host performance line chart" />
+    <figcaption>Host performance (line)</figcaption>
+  </figure>
+  <figure>
+    <img src={useBaseUrl('/img/charts/vm-line.png')} alt="VM performance line chart" />
+    <figcaption>VM performance (line)</figcaption>
+  </figure>
+  <figure>
+    <img src={useBaseUrl('/img/charts/cluster-storage-pie.png')} alt="Cluster storage capacity donut" />
+    <figcaption>Cluster storage capacity (donut)</figcaption>
+  </figure>
+  <figure>
+    <img src={useBaseUrl('/img/charts/cluster-memory-pie.png')} alt="Cluster memory capacity donut" />
+    <figcaption>Cluster memory capacity (donut)</figcaption>
+  </figure>
+  <figure>
+    <img src={useBaseUrl('/img/charts/host-storage-pie.png')} alt="Host storage capacity donut" />
+    <figcaption>Host storage capacity (donut)</figcaption>
+  </figure>
+  <figure>
+    <img src={useBaseUrl('/img/charts/clusters-storage-pie.png')} alt="All clusters storage donut" />
+    <figcaption>All clusters storage (donut)</figcaption>
+  </figure>
+  <figure>
+    <img src={useBaseUrl('/img/charts/containers-consumed-pie.png')} alt="Storage containers consumed donut" />
+    <figcaption>Storage containers consumed (donut)</figcaption>
+  </figure>
+</div>
